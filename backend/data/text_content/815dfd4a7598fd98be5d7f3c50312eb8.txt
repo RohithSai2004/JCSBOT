@@ -1,0 +1,64 @@
+Talari Rohith Sai
+rohithsaitalari@gmail.com | +91 9063231355 | GitHub: RohithSai2004
+Career Objective
+I aim to work for an organization that fosters my skills and knowledge, enabling me to grow while
+contributing to the organization’s objectives.
+Education
+DVR & Dr. HS MIC College of Technology, Kanchikacherla
+B.Tech in Artificial Intelligence and Machine Learning (2021–2025)
+Aggregate: 7.99
+Sri Gayatri Junior College, Vijayawada
+Intermediate, Board of Intermediate, Andhra Pradesh (2019–2021)
+Percentage: 82.8
+Ravindra Bharathi High School, Vijayawada
+SSC, Board of Secondary Education, Andhra Pradesh (2019)
+Aggregate: 8.5
+Project Experience
+College Mobile Fine Management System (Team Lead, Sep–Oct 2023)
+• Developed an online platform to manage fines for unauthorized mobile usage on college premises
+using HTML, CSS, PHP, and MySQL.
+Material Guru (Team Lead, Dec 2024)
+• Created a website where students can easily download semester materials uploaded by the college
+management.
+• Technologies used: HTML, CSS, Django, SQLite3.
+AI Newsletter (Team Member, Jan 2025–Present)
+• Developing a website using Crew AI agents to generate and deliver weekly newsletters.
+• Users can browse summarized news based on preferred categories.
+• Technologies used: HTML, CSS, React, Django, MySQL, Crew AI.
+• Role: Frontend Developer.
+Technical Skills
+Languages: Python (Good), Java (Intermediate), HTML, CSS, SQL (Basic), ReactJS (Basic), Django
+(Basic)
+Tools: Eclipse, Jupyter Notebook, VS Code
+1
+Certifications
+• Microsoft Certified Azure Administrator Associate (2023)
+• Microsoft Certified 365 Security Administrator Associate (2023)
+• Microsoft Certified Azure Fundamentals (2023)
+• Microsoft Azure AI Fundamentals (2023)
+• Fundamentals of Network Security - Palo Alto Networks (2023)
+• Crash Course on Python - Google (2022)
+Extracurricular Activities
+• Organized and conducted a tech hunt event at MIC College of Technology.
+• Successfully managed a bidding stall at MIC College.
+• Head Organizer and Operator of an Ice Gola stall at MIC College’s Aagama Fest for consecutive
+years.
+Strengths
+• Strong Work Ethic
+• Adaptability and Flexibility
+• Leadership Qualities
+• Teamwork and Collaboration
+• Positive Attitude and Enthusiasm
+• Customer Focus
+Interests
+• Learning new technologies
+• Mobile ROM customization
+• Simplifying technical concepts for friends
+• Playing with kids
+• Spending time with cows and dogs
+• Engaging with religious texts
+Declaration
+I hereby declare that the above information is true and correct to the best of my knowledge.
+Date: 7-02-2025
+Talari Rohith Sai
+2

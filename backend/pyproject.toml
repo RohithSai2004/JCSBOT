@@ -1,0 +1,30 @@
+[project]
+name = "jcs"
+version = "0.1.0"
+description = "JCS AI bot"
+requires-python = ">=3.12"
+
+authors = [
+    { name = "B.Guna", email = "gunasantosh999@gmail.com" }
+]
+
+dependencies = [
+    "pytest",
+    "ruff",
+    "mypy",
+    "python-dotenv",
+    "openai>=1.75.0",
+    "uvicorn>=0.34.2",
+    "fastapi[standard]>=0.115.12",
+    "llama-index>=0.12.31",
+    "python-multipart>=0.0.20",
+    "langdetect>=1.0.9",
+    "pymupdf>=1.25.5",
+    "pytesseract>=0.3.13",
+    "pillow>=11.2.1",
+    "pdf2image>=1.17.0",
+    "faiss-cpu>=1.10.0",
+    "paddleocr>=2.10.0",
+    "paddlepaddle>=3.0.0",
+]
+
