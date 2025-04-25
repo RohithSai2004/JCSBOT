@@ -11,6 +11,8 @@ import numpy as np
 from dotenv import load_dotenv
 from app.models.schemas import WelcomeResponse
 from app.utils.guardrails import validate_user_input
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # OpenAI imports
 import openai
