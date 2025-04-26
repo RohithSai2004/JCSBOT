@@ -14,30 +14,22 @@ const Signup = () => {
     const [loading, setLoading] = useState(false);
 
     const handleChange = (e) => {
-        setFormData({
-            ...formData,
-            [e.target.name]: e.target.value
-        });
+        setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setLoading(true);
-
         try {
             const formDataToSend = new FormData();
             formDataToSend.append('username', formData.username);
             formDataToSend.append('password', formData.password);
             formDataToSend.append('email', formData.email);
             formDataToSend.append('full_name', formData.full_name);
-
             await axios.post('http://localhost:8000/register', formDataToSend, {
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             });
-
             navigate('/login');
         } catch (err) {
             setError(err.response?.data?.detail || 'Registration failed. Please try again.');
@@ -107,6 +99,7 @@ const Signup = () => {
                                 name="password"
                                 type="password"
                                 required
+                                minLength={6}
                                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                                 placeholder="Password"
                                 value={formData.password}
@@ -114,7 +107,6 @@ const Signup = () => {
                             />
                         </div>
                     </div>
-
                     <div>
                         <button
                             type="submit"

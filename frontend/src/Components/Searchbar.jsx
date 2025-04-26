@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from "react";
 import { FaMicrophone, FaPaperPlane, FaPlus, FaFileAlt, FaTrash, FaRobot, FaUser } from "react-icons/fa";
 import { BsFileEarmarkText, BsFileEarmarkPdf, BsFileEarmarkImage } from "react-icons/bs";
 import { api } from "../api/apiClient";
+import apiClient from "../api/apiClient";
 
 const Searchbar = () => {
   const [query, setQuery] = useState("");
@@ -28,7 +29,7 @@ const Searchbar = () => {
 
   const loadSessionDocuments = async () => {
     try {
-      const response = await api.get(`/session/${userId}`);
+      const response = await apiClient.get(`/session/${userId}`);
       setActiveDocuments(response.data.active_documents || []);
     } catch (error) {
       console.error("Error loading session documents:", error);
@@ -116,7 +117,7 @@ const Searchbar = () => {
 
   const clearConversation = async () => {
     try {
-      await api.delete(`/memory/${userId}`);
+      await apiClient.delete(`/memory/${userId}`);
       setMessages([]);
       setActiveDocuments([]);
     } catch (error) {

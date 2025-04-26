@@ -14,6 +14,18 @@ const apiClient = axios.create({
   withCredentials: true, // Important for CORS with credentials
 });
 
+// Add a request interceptor to include the Authorization header if a token exists
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // API endpoints
 export const api = {
   // Chat endpoint

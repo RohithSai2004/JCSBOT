@@ -36,7 +36,7 @@ const Login = () => {
 
             localStorage.setItem('token', response.data.access_token);
             localStorage.setItem('username', formData.username);
-            navigate('/chat');
+            navigate('/');
         } catch (err) {
             setError(err.response?.data?.detail || 'Login failed. Please try again.');
         } finally {

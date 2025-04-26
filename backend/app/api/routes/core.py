@@ -48,7 +48,7 @@ MODEL_NAME = "gpt-3.5-turbo"  # or "gpt-4" if you have access
 router = APIRouter()
 
 # Authentication setup
-SECRET_KEY = secrets.token_hex(32)
+SECRET_KEY = os.getenv("SECRET_KEY", "your-very-secret-key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -307,10 +307,11 @@ async def chat(
     request: Request,
     prompt: str = Form(...),
     task: Optional[str] = Form(None),
-    user_id: str = Form("default_user"),
-    files: List[UploadFile] = File(None)
+    files: List[UploadFile] = File(None),
+    current_user: User = Depends(get_current_user)
 ):
     try:
+        user_id = current_user.username
         # Log inputs for debugging
         print(f"Task: {task}")
         print(f"Prompt: {prompt}")
@@ -328,12 +329,10 @@ async def chat(
                 for file in files:
                     if not file.filename:
                         continue
-                        
                     file_path = os.path.join(temp_dir, file.filename)
                     with open(file_path, "wb") as f:
                         content = await file.read()
                         f.write(content)
-                    
                     file_hash = await process_document(file_path, file.filename, user_id)
                     if file_hash:
                         processed_file_hashes.append(file_hash)
@@ -475,3 +474,7 @@ async def health_check():
         "status": "healthy",
         "time": datetime.now().isoformat()
     }
+@router.get("/session/{user_id}")
+async def get_session(user_id: str):
+    # For now, just return an empty list of active documents
+    return {"active_documents": []}
