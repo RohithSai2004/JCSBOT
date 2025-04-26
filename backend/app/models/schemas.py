@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
+from fastapi import UploadFile
 
 
 class WelcomeResponse(BaseModel):
@@ -8,9 +9,8 @@ class WelcomeResponse(BaseModel):
 
 class SecurityCheck(BaseModel):
     """Check for prompt injection or system manipulation attempts"""
-
     is_safe: bool = Field(description="Whether the input appears safe")
-    risk_flags: Optional[list[str]] = Field(description="List of potential security concerns")
+    reason: str = Field(description="Explanation of the security check result")
 
 class TaskCategoryResponseFormat(BaseModel):
     """Extract the category if task from user prompt."""
@@ -21,9 +21,10 @@ class TaskCategoryResponseFormat(BaseModel):
 class UserInput(BaseModel):
     prompt: str
     task: Optional[str] = None
-    files: Optional[List[str]] = None
+    files: Optional[List[UploadFile]] = None
 
     class Config:
+        arbitrary_types_allowed = True
         json_schema_extra = {
             "example": {
                 "prompt": "Summarize the following document: quarterly_report.pdf",

@@ -1,0 +1,398 @@
+ 
+  Elephants Counting and Detection Using      
+YOLOV5        
+ 
+  
+ 
+Abstract— Object detection now a days is popularly used 
+in most vision-based AI and it is sole to the various computer 
+vision tasks like face recognition ,Animal detection . This 
+paper is regarding the detection and counting of elephants 
+using YOLOv5 from drone images as drones allows you to 
+cover large areas and enables quick and efficient monitoring 
+of wildlife .YOLOv5 is the first YOLO model to be written in 
+PyTorch framework which is fast and accurate .As every 
+species plays a crucial role in the ecosystem ,extinction of one 
+specie may cause damage to entire ecosystem . So it is 
+important to detect the endangered species and ensure their 
+protection. In this project we make use of YOLO algorithm 
+to detect and count the endangered species from drone 
+images .In this project we have taken elephant as a reference 
+as the population of elephant is declining over several decades 
+due to poaching and loss of habitat . Existing model only has 
+detection of animal so we added counting of animals to 
+increase its efficiency. 
+Keywords-object detection,YOLOv5,drone images ,elephant . 
+I.  INTRODUCTION    
+The coexistence of humans and wildlife is essential for 
+maintaining the ecological balance of our planet. However, 
+in many regions, human activities and urbanization have 
+encroached on the natural habitats of various species, 
+leading to increased human-wildlife conflicts and 
+threatening the survival of several iconic and endangered 
+animals. Among these vulnerable species, the elephant, 
+with its immense cultural, ecological, and conservation 
+value, stands as a symbol of the challenges and 
+opportunities in wildlife preservation. 
+ 
+To mitigate the impacts of these conflicts and protect 
+elephant populations, it is crucial to monitor their 
+movements, behaviors, and habitats efficiently. Traditional 
+methods of data collection and monitoring, such as ground-
+based surveys and camera traps, have proven useful but are 
+often time-consuming, expensive, and labor-intensive. In 
+recent years, technological advancements have opened up 
+new horizons for wildlife monitoring and conservation. 
+One such innovation is the utilization of Unmanned Aerial 
+Vehicles (UAVs) or drones equipped with advanced 
+computer vision algorithms. 
+This document focuses on the application of the YOLO 
+(You Only Look Once) algorithm to the crucial task of 
+elephant species detection from drone images. YOLO is an 
+object detection algorithm renowned for its speed and 
+accuracy, making it an ideal choice for real-time 
+applications. By leveraging the capabilities of YOLO and 
+deploying drones equipped with cameras, we aim to 
+revolutionize the way we monitor and safeguard elephant 
+populations. 
+ 
+                          II.LITERATURE REVIEW 
+1.Title:Using very-high-resolution satellite imagery and deep 
+learning to detect and count African elephants in 
+heterogeneous landscapes 
+Authors:Isla Duporge, Olga Isupova, Steven Reece, David 
+W. Macdonald, Tiejun Wang 
+Publication:ZSL publication 
+Summary:This paper is about a deep learning algorithm 
+Faster R-CNN Inception ResNet V2 model that is trained in 
+tensorflow object detection api. We used YOLO algorithm as 
+YOLO performs better in terms of accuracy, speed and 
+efficiency than Faster R-CNN . 
+ 
+2.Title:Improved object detection algorithm for drone 
+captured dataset based on yolov5. 
+Authors:Kaiwen Ding,Xianjiang Li ,Weijie Guo ,Liaoni Wu. 
+Publication:IEEE Xplore 
+Summary:This paper explores fundamentals of YOLOv5 
+model to detect objects from images and here the objects 
+detected by them are cars.We used YOLOv5 by taking this 
+paper as a reference and implemented on elephant drone 
+images. 
+ 
+3.Title: An Elephant Detection System to Prevent Human-
+Elephant Conflict and Tracking of Elephant Using Deep 
+Learning. 
+Authors:K.S.P.Premarathna; R.M.K.T.Rathnayaka;J.Charles 
+Publication:IEEE 
+Summary:In this project,they used a data set containing 
+elephants and developed an approach to distinguish elephants 
+and other animals and used the Convolutional Neural 
+Network. 
+4. Title: Research on improved YOLOv5 face mask 
+recognition     algorithm based on 
+Authors:Yan Zhang;Ying Cuan;Yuxin Jiang 
+Publication:IEEE  
+Summary:In this paper, they applied YOLOv5 with 
+combination of different attention mechanisms like SE,CA 
+and CBAMc3 which increased the accuracy of YOLOv5 
+model for improved face mask recognition. 
+ 
+III. METHODOLOGY AND RELATED WORK  
+In this part, we will firstly introduce the traditional structure 
+of yolov5.  
+ 
+ 
+ 
+                                                 Figure 1. Yolov5s structure  
+Backbone Network: 
+YOLOv5 uses a backbone network based on CSPDarknet53 
+or EfficientNet as the feature extraction backbone. The 
+choice of the backbone allows for better feature 
+representation and contributes significantly to accuracy. 
+Neck and Head: 
+YOLOv5 introduces a novel "neck" and "head" structure that 
+refines and processes features at different scales. This helps 
+in improving detection accuracy for objects of varying sizes. 
+ 
+Input Layer: 
+The input layer takes the image as input. YOLO typically 
+takes images of fixed sizes as input, which are divided into a 
+grid for processing. 
+Convolutional Layers: 
+YOLO primarily consists of convolutional layers that 
+perform feature extraction. These layers analyze the input 
+image to extract hierarchical representations of features. 
+Downsampling Layers: 
+Downsampling or pooling layers reduce the spatial 
+dimensions of the feature maps while increasing the 
+receptive field. This helps in capturing context and reducing 
+computation. 
+ 
+Concatenation and Upsampling layers: 
+In some YOLO variants, concatenation or upsampling layers 
+are used to fuse features from different scales or increase the 
+spatial resolution of feature maps for better object 
+localization. 
+Output Layer: 
+The output layer contains the final predictions of bounding 
+boxes, confidence scores, and class probabilities. These 
+predictions are then post-processed to identify and draw 
+bounding boxes around detected objects. 
+ 
+Now we will explain the steps to be followed to train custom 
+YOLOv5  model. 
+ 
+         
+     
+                                     Figure 2. Methodology 
+A. Dataset Creation 
+As the project is regarding elephants drone images 
+,so collect the images of elephants drone images 
+from various resources like google and save them 
+in a folder. The images should be like Figure 3. 
+ 
+                                   Figure 3. Elephant drone image 
+B. Annotate Dataset 
+For annotation the images should be in .png or .jpg 
+format. Objects can be annotate inside the images 
+of dataset using labels like bounding boxes .After 
+completion the annotations will be generated as text 
+file to be used in YOLOv5 custom model training 
+as shown in Figure 4. 
+ 
+     
+                                         Figure 4. .Annotations 
+ 
+ 
+C. Dataset classification 
+Here we randomly split the dataset images into train 
+,test , val by allocating 80% of images  to train ,10% 
+to val and remaining 10% to test .This kind of 
+classification is required to train custom YOLOv5 
+model otherwise it will show error . 
+ 
+D. Data Preprocessing 
+Upload the dataset in Roboflow and apply 
+preprocessing  techniques . 
+This techniques are used to decrease time and 
+increase 
+performance 
+by 
+applying 
+image 
+transformations to all images in this dataset. Here 
+we used preprocessing techniques like Resize and 
+Auto orient. 
+Image resizing is a fundamental preprocessing step 
+in object detection pipelines. It standardizes input 
+dimensions, enhances computational efficiency, 
+and contributes to the model's ability to generalize 
+and detect objects effectively in various scenarios. 
+Images might have different orientations (e.g., 
+landscape, portrait) that can affect the accuracy of 
+object detection algorithms if not handled properly. 
+The "auto orient" preprocessing step, often 
+associated with images, refers to an operation that 
+automatically adjusts the orientation of an image 
+based on its metadata. 
+ 
+We can also apply augmentation for our dataset like 
+flip, crop to increase the efficiency of yolov5 
+model. 
+ 
+Now generate the dataset by applying above 
+modifications and export dataset in YOLOv5 PyTorch 
+format.Then it will generate a snippet as shown in 
+Figure 5 which is used further in YOLOv5 custom 
+model training. 
+ 
+                     Figure 5. Snippet to download and unzip our dataset 
+ 
+E. Training of custom YOLOv5 model in google colab 
+ 
+Install requirements: 
+Clone YOLOv5 repository from github  and install 
+all required dependencies. 
+ 
+Assemble the  Dataset: 
+Assemble the dataset uploaded in Roboflow using 
+the snippet in Figure 4. 
+ 
+Train our custom YOLOv5 model: 
+ 
+We train the custom YOLOv5 model using below 
+code 
+!python train.py --img 416 --batch 16 --epochs 
+150 --data {dataset.location}/data.yaml --weights 
+yolov5s.pt --cache 
+ 
+Here dataset.location is the location where our 
+dataset is stored and in that dataset only we have 
+data.yaml file.Now our model training is completed 
+and we can download our elephants custom yolov5 
+model 
+which 
+is 
+stored 
+in 
+a 
+path  
+'./runs/train/exp/weights/best.pt' 
+ 
+F. Deployment of yolov5 model 
+ 
+Here for deployment of elephants YOLOv5 custom 
+model we use tkinter .Tkinter is the popular GUI 
+library of python which is used to create GUI for 
+object detection projects.The sample GUI which is 
+developed using tkinter is shown in Figure 6.This 
+GUI is used to count and detect elephants in image. 
+ 
+ 
+                                 Figure 6. Sample GUI 
+ 
+                                                 IV. RESULTS  
+A. Elephants Detection 
+ 
+From Figure 6 if we click Detect Elephants button  
+then we will get the results of elephants detected in 
+image depending on the YOLOv5 model loaded into 
+the GUI. 
+     
+                               Figure 7.  Elephants detection 
+ 
+B. Elephants Counting 
+ 
+From Figure 6 if we click Count Elephants button then 
+we will get result of the count of elephants present in 
+the image depending  on the YOLOv5 mdel loaded 
+into the GUI. 
+ 
+                                 Figure 8. Elephants Counting 
+ 
+C. Evaluation Metrics 
+ 
+Precision and Recall: 
+Precision measures the ratio of correctly predicted       
+positive observations to the total predicted positive 
+observations. It shows the accuracy of positive 
+predictions, emphasizing how precise the model is 
+when it predicts positive classes. 
+          Precision = TP / (TP + FP) 
+Recall measures the ratio of correctly predicted 
+positive observations to all actual positives in the 
+dataset. It indicates the model's ability to identify all 
+positive instances, emphasizing completeness. 
+          Recall = TP / (TP + FN) 
+ 
+ 
+                         Figure 9.Precision-Recall Curve 
+F1-confidence threshold: 
+The F1 score is a metric that combines precision and 
+recall into a single value, providing a balance between 
+these two metrics. It is computed as the harmonic 
+mean of precision and recall: 
+        F1=2×Precision×Recall/(Precision+Recall) 
+The F1 score accounts for both false positives 
+(precision) and false negatives (recall), making it 
+useful for evaluating model performance in binary 
+classification tasks. 
+In object detection models like YOLO, confidence 
+thresholds are used to filter detections based on their 
+confidence scores. Detections with confidence scores 
+below the threshold are often disregarded to control 
+false positives. 
+     
+            Figure 10 . F1-Confidence curve 
+Confusion Matrix: 
+True Positive (TP): Correctly identified elephants by the 
+model. 
+False Positive (FP): Incorrectly detected elephants (model 
+predicts elephants where there are none). 
+False Negative (FN): Missed detections where elephants are 
+present but not identified by the model. 
+True Negative (TN): Not typically applicable in object 
+detection scenarios (usually relates to correctly identifying 
+non-target objects). 
+ 
+                               Figure 11. Confusion matrix 
+V.CONCLUSION AND FUTURE ENHANCEMENT 
+    A. Conclusion 
+In this paper we have used YOLOv5 algorithm 
+to detect and count elephants from drone images 
+which will be useful to monitor elephants in 
+elephant 
+reserves,forests 
+.Our 
+model 
+is 
+performing good with detection and counting of  
+elephants very  accurately from the images we 
+provide to it. 
+ B. Future Enhancements 
+For this model we can add video and webcam 
+options which reduces the burden of uploading 
+images and increase its usage as the scope of the 
+project is only to detect and count from images. 
+                                  VI. REFERENCES 
+[1] Chamoso, P.; Raveane, W.; Parra, V.; González, A. UAVs 
+applied to the counting and monitoring of animals. In 
+Proceedings of the Ambient Intelligence-software and 
+Applications, Salamanca, Spain, 4–6 June 2014; Springer: 
+Cham, Switzerland, 2014; pp. 71–80.  
+[2] Prosekov, A.; Kuznetsov, A.; Rada, A.; Ivanova, S. Methods for 
+monitoring large terrestrial animals in the wild. Forests 2020, 11, 
+808.  
+[3] Kellenberger, B.; Marcos, D.; Tuia, D. Detecting mammals in 
+UAV images: Best practices to address a substantially imbalanced 
+dataset with deep learning. Remote Sens. Environ. 2018, 216, 139–
+153.  
+[4] Gemert, J.C.v.; Verschoor, C.R.; Mettes, P.; Epema, K.; Koh, 
+L.P.; Wich, S. Nature conservation drones for automatic 
+localization and counting of animals. In Proceedings of the 
+European Conference on Computer Vision, Zurich, Switzerland, 6–
+7 September 2014; Springer: Cham, Switzerland, 2014; pp. 255–
+270.  
+[5] Darshanraj N, P.K. Animal Counting and Detection Using 
+Convolutional Neural Network. Int. Res. J. Eng. Technol. 
+(IRJET) 2020, 7, 7.  
+[6] Wang, C.Y.; Bochkovskiy, A.; Liao, H.Y.M. Scaled-YOLOv4: 
+Scaling Cross Stage Partial Network. In Proceedings of the 
+IEEE/CVF Conference on Computer Vision and Pattern 
+Recognition (CVPR), online, 19–25 June 2021; pp. 13029–13038.  
+[7] Rosli, M.S.A.B.; Isa, I.S.; Maruzuki, M.I.F.; Sulaiman, S.N.; 
+Ahmad, I. Underwater animal detection using YOLOV4. In 
+Proceedings of the 2021 11th IEEE International Conference on 
+Control System, Computing and Engineering (ICCSCE), Penang, 
+Malaysia, 27–28 August 2021; IEEE: New York, NY, USA, 2021; 
+pp. 158–163. 
+[8] Duporge, I.; Isupova, O.; Reece, S.; Macdonald, D.W.; Wang, 
+T. Using very-high-resolution satellite imagery and deep learning to 
+detect 
+and 
+count 
+African 
+elephants 
+in 
+heterogeneous 
+landscapes. Remote Sens. Ecol. Conserv. 2021, 7, 369–381.  
+[9] K. Ding, X. Li, W. Guo and L. Wu, "Improved object detection 
+algorithm for drone-captured dataset based on yolov5," 2022 2nd 
+International Conference on Consumer Electronics and Computer 
+Engineering (ICCECE), Guangzhou, China,2022,pp.895-899. 
+[10] K. S. P. Premarathna, R. M. K. T. Rathnayaka and J. Charles, 
+"An Elephant Detection System to Prevent Human-Elephant 
+Conflict and Tracking of Elephant Using Deep Learning," 2020 5th 
+International Conference on Information Technology Research 
+(ICITR), Moratuwa, Sri Lanka, 2020, pp. 1-6. 
+[11] Y. Zhang, Y. Cuan and Y. Jiang, "Research on improved 
+YOLOv5 face mask recognition algorithm based on," 2023 8th 
+International Conference on Intelligent Computing and Signal 
+Processing (ICSP), Xi'an, China, 2023, pp. 1414-1417. 
+ 
+ 
+ 
+ 
+ 
+ 
+. 
