@@ -53,6 +53,7 @@ class DocumentEmbedding(BaseModel):
     chunk_id: int
     text: str
     embedding: List[float]
+    user_id: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 # Database operations
@@ -72,8 +73,11 @@ async def update_user_last_login(username: str) -> None:
 async def save_document(document: Document) -> None:
     await documents_collection.insert_one(document.dict())
 
-async def get_document(file_hash: str) -> Optional[Document]:
-    doc = await documents_collection.find_one({"file_hash": file_hash})
+async def get_document(file_hash: str, user_id: str) -> Optional[Document]:
+    doc = await documents_collection.find_one({
+        "file_hash": file_hash,
+        "user_id": user_id
+    })
     return Document(**doc) if doc else None
 
 async def save_chat_message(message: ChatMessage) -> None:
@@ -89,7 +93,10 @@ async def get_user_chat_history(user_id: str, limit: int = 10) -> List[ChatMessa
 async def save_document_embedding(embedding: DocumentEmbedding) -> None:
     await embeddings_collection.insert_one(embedding.dict())
 
-async def get_document_embeddings(document_hash: str) -> List[DocumentEmbedding]:
-    cursor = embeddings_collection.find({"document_hash": document_hash})
+async def get_document_embeddings(document_hash: str, user_id: str) -> List[DocumentEmbedding]:
+    cursor = embeddings_collection.find({
+        "document_hash": document_hash,
+        "user_id": user_id
+    })
     embeddings = await cursor.to_list(length=None)
     return [DocumentEmbedding(**emb) for emb in embeddings] 

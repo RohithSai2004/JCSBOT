@@ -197,10 +197,14 @@ async def process_document(file_path: str, filename: str, user_id: str) -> Optio
     try:
         file_hash = calculate_file_hash(file_path)
         
-        # Check if document already exists
-        existing_doc = await get_document(file_hash)
+        # Check if document already exists for this specific user
+        existing_doc = await documents_collection.find_one({
+            "file_hash": file_hash,
+            "user_id": user_id
+        })
+        
         if existing_doc:
-            print(f"Document {filename} already exists with hash {file_hash}")
+            print(f"Document {filename} already exists for user {user_id} with hash {file_hash}")
             return file_hash
         
         # Extract text from the document
@@ -229,16 +233,17 @@ async def process_document(file_path: str, filename: str, user_id: str) -> Optio
             embedding = get_embedding(chunk)
             chunk_embeddings.append(embedding)
             
-            # Save chunk embedding
+            # Save chunk embedding with user_id
             doc_embedding = DocumentEmbedding(
                 document_hash=file_hash,
                 chunk_id=i,
                 text=chunk,
-                embedding=embedding
+                embedding=embedding,
+                user_id=user_id  # Add user_id to embeddings
             )
             await save_document_embedding(doc_embedding)
         
-        # Save document
+        # Save document with user_id
         document = Document(
             file_hash=file_hash,
             filename=filename,
@@ -344,7 +349,7 @@ async def chat(
         user_documents = []
         if processed_file_hashes:
             for file_hash in processed_file_hashes:
-                doc = await get_document(file_hash)
+                doc = await get_document(file_hash, user_id)
                 if doc:
                     user_documents.append(doc)
         
@@ -368,7 +373,7 @@ async def chat(
                     document_contexts.append(f"Content of {doc.filename}:\n\n{doc.content}")
                 else:
                     # Search for relevant chunks
-                    doc_embeddings = await get_document_embeddings(doc.file_hash)
+                    doc_embeddings = await get_document_embeddings(doc.file_hash, user_id)
                     if doc_embeddings:
                         query_embedding = get_embedding(prompt)
                         similarities = []
