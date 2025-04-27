@@ -19,7 +19,8 @@ from app.db.mongodb import (
     save_document, get_document, save_chat_message,
     get_user_chat_history, save_document_embedding,
     get_document_embeddings, User, Document, ChatMessage,
-    DocumentEmbedding
+    DocumentEmbedding, documents_collection, chat_history_collection,
+    embeddings_collection
 )
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -478,3 +479,42 @@ async def health_check():
 async def get_session(user_id: str):
     # For now, just return an empty list of active documents
     return {"active_documents": []}
+
+@router.get("/documents", response_model=List[Document])
+async def get_user_documents(current_user: User = Depends(get_current_user)):
+    """Get all documents for the current user."""
+    try:
+        # Get documents for the current user
+        cursor = documents_collection.find({"user_id": current_user.username})
+        documents = await cursor.to_list(length=None)
+        
+        # Convert to Document models
+        return [Document(**doc) for doc in documents] if documents else []
+    except Exception as e:
+        print(f"Error fetching documents: {str(e)}")  # Add logging
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch documents. Please try again later."
+        )
+
+@router.delete("/documents/{file_hash}")
+async def delete_document(file_hash: str, current_user: User = Depends(get_current_user)):
+    """Delete a document and its associated embeddings."""
+    try:
+        # Verify document ownership
+        doc = await get_document(file_hash)
+        if not doc or doc.user_id != current_user.username:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        # Delete document
+        await documents_collection.delete_one({"file_hash": file_hash})
+        
+        # Delete associated embeddings
+        await embeddings_collection.delete_many({"document_hash": file_hash})
+        
+        # Delete associated chat messages
+        await chat_history_collection.delete_many({"document_hashes": file_hash})
+        
+        return {"message": "Document and associated data deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

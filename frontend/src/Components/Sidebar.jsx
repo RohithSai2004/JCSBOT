@@ -1,7 +1,16 @@
 import { FaHome, FaFileAlt, FaHistory, FaCog, FaSignOutAlt, FaLightbulb } from "react-icons/fa";
 import { BsChatSquareText } from "react-icons/bs";
+import { Link, useNavigate } from 'react-router-dom';
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    navigate('/login');
+  };
+
   return (
     <>
       {/* Sidebar Toggle Button */}
@@ -41,28 +50,28 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
           <nav className="flex-1">
             <ul className="space-y-2">
               <li>
-                <a href="#" className="flex items-center p-3 rounded-lg bg-blue-700">
+                <Link to="/" className="flex items-center p-3 rounded-lg bg-blue-700">
                   <FaHome className="mr-3" />
                   <span>Home</span>
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
+                <Link to="/documents" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
                   <FaFileAlt className="mr-3" />
-                  <span>Documents</span>
-                </a>
+                  <span>Documents History</span>
+                </Link>
               </li>
               <li>
-                <a href="#" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
+                <Link to="/chat" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
                   <FaHistory className="mr-3" />
                   <span>History</span>
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
+                <Link to="/insights" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
                   <FaLightbulb className="mr-3" />
                   <span>Insights</span>
-                </a>
+                </Link>
               </li>
             </ul>
           </nav>
@@ -71,16 +80,19 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
           <div className="mt-auto">
             <ul className="space-y-2">
               <li>
-                <a href="#" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
+                <Link to="/settings" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
                   <FaCog className="mr-3" />
                   <span>Settings</span>
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center p-3 rounded-lg hover:bg-blue-700"
+                >
                   <FaSignOutAlt className="mr-3" />
                   <span>Logout</span>
-                </a>
+                </button>
               </li>
             </ul>
           </div>
