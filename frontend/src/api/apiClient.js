@@ -55,7 +55,7 @@ export const api = {
   },
 
   deleteDocument: async (fileHash) => {
-    const response = await apiClient.delete(`/api/core/document/${fileHash}`);
+    const response = await apiClient.delete(`/documents/${fileHash}`);
     return response.data;
   },
 

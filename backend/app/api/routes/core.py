@@ -507,19 +507,20 @@ async def delete_document(file_hash: str, current_user: User = Depends(get_curre
     """Delete a document and its associated embeddings."""
     try:
         # Verify document ownership
-        doc = await get_document(file_hash)
-        if not doc or doc.user_id != current_user.username:
+        doc = await get_document(file_hash, current_user.username)
+        if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
 
         # Delete document
-        await documents_collection.delete_one({"file_hash": file_hash})
+        await documents_collection.delete_one({"file_hash": file_hash, "user_id": current_user.username})
         
         # Delete associated embeddings
-        await embeddings_collection.delete_many({"document_hash": file_hash})
+        await embeddings_collection.delete_many({"document_hash": file_hash, "user_id": current_user.username})
         
         # Delete associated chat messages
-        await chat_history_collection.delete_many({"document_hashes": file_hash})
+        await chat_history_collection.delete_many({"document_hashes": file_hash, "user_id": current_user.username})
         
         return {"message": "Document and associated data deleted successfully"}
     except Exception as e:
+        print(f"Error deleting document: {str(e)}")  # Add logging
         raise HTTPException(status_code=500, detail=str(e))
