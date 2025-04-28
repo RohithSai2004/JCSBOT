@@ -348,6 +348,7 @@ async def chat(
         # Get user's documents
         user_documents = []
         if processed_file_hashes:
+            # Get the most recently uploaded document
             for file_hash in processed_file_hashes:
                 doc = await get_document(file_hash, user_id)
                 if doc:
@@ -368,23 +369,28 @@ async def chat(
         if task_info.task in ["summarization", "file Q&A", "comparison"] and user_documents:
             document_contexts = []
             
-            for doc in user_documents:
-                if task_info.task == "summarization":
-                    document_contexts.append(f"Content of {doc.filename}:\n\n{doc.content}")
-                else:
-                    # Search for relevant chunks
-                    doc_embeddings = await get_document_embeddings(doc.file_hash, user_id)
-                    if doc_embeddings:
-                        query_embedding = get_embedding(prompt)
-                        similarities = []
-                        for emb in doc_embeddings:
-                            similarity = cosine_similarity(query_embedding, emb.embedding)
-                            similarities.append((similarity, emb.text))
-                        
-                        similarities.sort(reverse=True, key=lambda x: x[0])
-                        relevant_chunks = [text for _, text in similarities[:3]]
-                        if relevant_chunks:
-                            document_contexts.append(f"Relevant content from {doc.filename}:\n\n" + "\n\n".join(relevant_chunks))
+            # Use only the most recently uploaded document for summarization
+            if task_info.task == "summarization" and user_documents:
+                latest_doc = user_documents[-1]  # Get the most recent document
+                document_contexts.append(f"Content of {latest_doc.filename}:\n\n{latest_doc.content}")
+            else:
+                for doc in user_documents:
+                    if task_info.task == "summarization":
+                        document_contexts.append(f"Content of {doc.filename}:\n\n{doc.content}")
+                    else:
+                        # Search for relevant chunks
+                        doc_embeddings = await get_document_embeddings(doc.file_hash, user_id)
+                        if doc_embeddings:
+                            query_embedding = get_embedding(prompt)
+                            similarities = []
+                            for emb in doc_embeddings:
+                                similarity = cosine_similarity(query_embedding, emb.embedding)
+                                similarities.append((similarity, emb.text))
+                            
+                            similarities.sort(reverse=True, key=lambda x: x[0])
+                            relevant_chunks = [text for _, text in similarities[:3]]
+                            if relevant_chunks:
+                                document_contexts.append(f"Relevant content from {doc.filename}:\n\n" + "\n\n".join(relevant_chunks))
             
             combined_context = "\n\n---\n\n".join(document_contexts)
             
