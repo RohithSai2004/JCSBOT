@@ -10,10 +10,14 @@ import shutil
 import os
 import pickle
 import numpy as np
+import asyncio
+import fitz  # PyMuPDF for PDF processing
 from dotenv import load_dotenv
 from app.models.schemas import WelcomeResponse
 from app.utils.guardrails import validate_user_input
-import pytesseract
+from app.services.ocr_service import OCRService
+from app.services.chat_session import chat_session_manager
+from app.utils.embeddings import get_embedding, cosine_similarity
 from app.db.mongodb import (
     get_user, create_user, update_user_last_login,
     save_document, get_document, save_chat_message,
@@ -23,8 +27,6 @@ from app.db.mongodb import (
     embeddings_collection
 )
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-
 # JWT imports
 import jwt
 import secrets
@@ -33,10 +35,6 @@ from passlib.context import CryptContext
 # OpenAI imports
 from openai import OpenAI
 
-# Image and PDF processing
-from PIL import Image
-import fitz  # PyMuPDF
-
 # Load environment variables
 load_dotenv()
 
@@ -44,7 +42,7 @@ load_dotenv()
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Update model name to a valid one
-MODEL_NAME = "gpt-3.5-turbo"  # or "gpt-4" if you have access
+MODEL_NAME = "gpt-4o-mini"  # or "gpt-4" if you have access
 
 router = APIRouter()
 
@@ -55,6 +53,13 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# Initialize OCR service
+ocr_service = OCRService()
+
+# Constants
+MAX_FILE_SIZE_MB = 500  # Increased to 500MB
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024  # Convert to bytes
 
 # User models
 class UserInDB(User):
@@ -112,35 +117,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     return user
 
 # Utility functions
-def extract_text_from_image(file_path: str) -> str:
-    """Extract text from an image using OCR."""
-    image = Image.open(file_path)
-    return pytesseract.image_to_string(image)
-
-def extract_text_from_pdf(file_path: str) -> str:
-    """Extract text from a PDF, with OCR fallback for scanned pages."""
-    doc = fitz.open(file_path)
-    full_text = ""
-    for page in doc:
-        text = page.get_text()
-        if text.strip():
-            full_text += text
-        else:
-            pix = page.get_pixmap(dpi=300)
-            image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            ocr_text = pytesseract.image_to_string(image)
-            full_text += ocr_text
-    doc.close()
-    return full_text
-
-def extract_text_via_ocr(file_path: str) -> Optional[str]:
-    """Extract text from a file using OCR if needed."""
-    if file_path.lower().endswith((".png", ".jpg", ".jpeg", ".tiff", ".bmp")):
-        return extract_text_from_image(file_path)
-    elif file_path.lower().endswith(".pdf"):
-        return extract_text_from_pdf(file_path)
-    return None
-
 def calculate_file_hash(file_path: str) -> str:
     """Calculate a hash for a file to use as a unique identifier."""
     hash_md5 = hashlib.md5()
@@ -177,20 +153,6 @@ def text_to_chunks(text: str, chunk_size: int = 1000, overlap: int = 200) -> Lis
     
     return chunks
 
-def get_embedding(text: str) -> List[float]:
-    """Get embedding for text using OpenAI API."""
-    response = openai_client.embeddings.create(
-        input=text,
-        model="text-embedding-3-small"
-    )
-    return response.data[0].embedding
-
-def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
-    """Calculate cosine similarity between two vectors."""
-    vec1 = np.array(vec1)
-    vec2 = np.array(vec2)
-    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
-
 # Document processing
 async def process_document(file_path: str, filename: str, user_id: str) -> Optional[str]:
     """Process a document and return its hash."""
@@ -207,23 +169,12 @@ async def process_document(file_path: str, filename: str, user_id: str) -> Optio
             print(f"Document {filename} already exists for user {user_id} with hash {file_hash}")
             return file_hash
         
-        # Extract text from the document
-        if file_path.lower().endswith((".txt", ".md")):
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                text_content = f.read()
-        elif file_path.lower().endswith(".docx"):
-            try:
-                import docx
-                doc = docx.Document(file_path)
-                text_content = "\n".join([paragraph.text for paragraph in doc.paragraphs])
-            except Exception as e:
-                print(f"Error extracting text from DOCX: {e}")
-                text_content = ""
-        else:
-            text_content = extract_text_via_ocr(file_path)
-            if not text_content:
-                print(f"Could not extract text from {filename}")
-                return None
+        # Extract text using OCR service
+        text_content, success = ocr_service.extract_text(file_path)
+        
+        if not success:
+            print(f"Could not extract text from {filename}")
+            return None
         
         # Create chunks and get embeddings
         chunks = text_to_chunks(text_content)
@@ -239,7 +190,7 @@ async def process_document(file_path: str, filename: str, user_id: str) -> Optio
                 chunk_id=i,
                 text=chunk,
                 embedding=embedding,
-                user_id=user_id  # Add user_id to embeddings
+                user_id=user_id
             )
             await save_document_embedding(doc_embedding)
         
@@ -314,6 +265,7 @@ async def chat(
     prompt: str = Form(...),
     task: Optional[str] = Form(None),
     files: List[UploadFile] = File(None),
+    session_id: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user)
 ):
     try:
@@ -323,6 +275,11 @@ async def chat(
         print(f"Prompt: {prompt}")
         print(f"User ID: {user_id}")
         print(f"Files: {[file.filename for file in files] if files else 'No files'}")
+        print(f"Session ID: {session_id}")
+
+        # Get or create chat session
+        session = await chat_session_manager.get_or_create_session(user_id, session_id)
+        print(f"Using session: {session.session_id}")
 
         # Validate input
         task_info = await validate_user_input(prompt, task, files)
@@ -335,149 +292,182 @@ async def chat(
                 for file in files:
                     if not file.filename:
                         continue
+                    
+                    # Check file size
+                    file_size = 0
+                    chunk_size = 1024 * 1024  # 1MB chunks
                     file_path = os.path.join(temp_dir, file.filename)
+                    
                     with open(file_path, "wb") as f:
-                        content = await file.read()
-                        f.write(content)
-                    file_hash = await process_document(file_path, file.filename, user_id)
+                        while True:
+                            chunk = await file.read(chunk_size)
+                            if not chunk:
+                                break
+                            file_size += len(chunk)
+                            f.write(chunk)
+                            
+                            # Check if file is too large
+                            if file_size > MAX_FILE_SIZE_BYTES:
+                                raise HTTPException(
+                                    status_code=400,
+                                    detail=f"File {file.filename} is too large. Maximum size is {MAX_FILE_SIZE_MB}MB."
+                                )
+                    
+                    # Process document in chunks if it's a large PDF
+                    if file.filename.lower().endswith('.pdf'):
+                        file_hash = await process_large_document(file_path, file.filename, user_id)
+                    else:
+                        file_hash = await process_document(file_path, file.filename, user_id)
+                        
                     if file_hash:
                         processed_file_hashes.append(file_hash)
+                        # Add document to active documents in session
+                        if file_hash not in session.active_documents:
+                            session.active_documents.append(file_hash)
+                            # Save session after adding document
+                            await session.save_to_db()
+            except Exception as e:
+                print(f"Error processing files: {str(e)}")
+                print(f"Document hashes: None")
+                print(f"Error extracting text via OCR: {str(e)}")
+                print(f"Could not extract text from {[file.filename for file in files]}")
             finally:
                 shutil.rmtree(temp_dir)
-        
-        # Get user's documents
-        user_documents = []
-        if processed_file_hashes:
-            # Get the most recently uploaded document
-            for file_hash in processed_file_hashes:
-                doc = await get_document(file_hash, user_id)
-                if doc:
-                    user_documents.append(doc)
-        
-        # Get chat history
-        chat_history = await get_user_chat_history(user_id, limit=5)
-        
-        # Prepare context
-        context = ""
-        if chat_history:
-            context = "Recent conversation:\n" + "\n".join([
-                f"User: {msg.prompt}\nBot: {msg.response}" 
-                for msg in chat_history
-            ])
-        
-        # Document-based tasks
-        if task_info.task in ["summarization", "file Q&A", "comparison"] and user_documents:
-            document_contexts = []
-            
-            # Use only the most recently uploaded document for summarization
-            if task_info.task == "summarization" and user_documents:
-                latest_doc = user_documents[-1]  # Get the most recent document
-                document_contexts.append(f"Content of {latest_doc.filename}:\n\n{latest_doc.content}")
-            else:
-                for doc in user_documents:
-                    if task_info.task == "summarization":
-                        document_contexts.append(f"Content of {doc.filename}:\n\n{doc.content}")
-                    else:
-                        # Search for relevant chunks
-                        doc_embeddings = await get_document_embeddings(doc.file_hash, user_id)
-                        if doc_embeddings:
-                            query_embedding = get_embedding(prompt)
-                            similarities = []
-                            for emb in doc_embeddings:
-                                similarity = cosine_similarity(query_embedding, emb.embedding)
-                                similarities.append((similarity, emb.text))
-                            
-                            similarities.sort(reverse=True, key=lambda x: x[0])
-                            relevant_chunks = [text for _, text in similarities[:3]]
-                            if relevant_chunks:
-                                document_contexts.append(f"Relevant content from {doc.filename}:\n\n" + "\n\n".join(relevant_chunks))
-            
-            combined_context = "\n\n---\n\n".join(document_contexts)
-            
-            if task_info.task == "summarization":
-                task_instruction = "Please provide a detailed and comprehensive summary of the following document."
-            elif task_info.task == "comparison":
-                task_instruction = "Please compare and contrast the following documents in detail."
-            elif task_info.task == "file Q&A":
-                task_instruction = "Please answer the question based on the document content. If the answer isn't in the document, clearly state that and provide your best general knowledge answer."
-            
-            messages = [
-                {"role": "system", "content": """You are JCS Bot, an advanced enterprise assistant. Your responses should be detailed, informative, and actionable.
 
-When answering questions about documents:
-1. Always use the document content as your primary source of information.
-2. If the answer isn't explicitly in the document, clearly state this but then provide helpful information based on your general knowledge.
-3. Format your responses with headings, bullet points, and emphasis where appropriate.
-4. For technical content, provide concrete examples and explanations.
-5. Always maintain a professional, confident tone."""}
-            ]
-            
-            if combined_context:
-                messages.append({"role": "system", "content": combined_context})
-            
-            if context:
-                messages.append({"role": "system", "content": context})
-            
-            messages.append({"role": "user", "content": f"{task_instruction} {prompt}"})
-            
-            response = openai_client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=messages
-            )
-            
-            response_text = response.choices[0].message.content
-            
-            # Save chat message
-            chat_message = ChatMessage(
-                user_id=user_id,
-                prompt=prompt,
-                response=response_text,
-                document_hashes=processed_file_hashes,
-                task=task_info.task
-            )
-            await save_chat_message(chat_message)
-            
-            return {"response": response_text}
+        # Get chat context
+        chat_context = await session.get_context()
         
-        # General conversation
-        else:
-            messages = [
-                {"role": "system", "content": """You are JCS Bot, an advanced enterprise assistant. Your responses should be helpful, informative, and conversational.
+        # Get document context if needed
+        document_context = ""
+        if task_info.task in ["summarization", "file Q&A", "comparison"] or session.active_documents:
+            document_context = await session.get_document_context(prompt)
+            print(f"Document context: {document_context[:200]}...")  # Log first 200 chars
 
-When answering questions:
-1. Use both document content (if provided) and your general knowledge to give comprehensive answers.
-2. Be clear about what information comes from documents vs. your general knowledge.
-3. If you're speculating or giving an opinion, make that clear.
-4. Your tone should be friendly but professional.
-5. Format your responses clearly with good structure."""}
-            ]
-            
-            if context:
-                messages.append({"role": "system", "content": context})
-            
-            messages.append({"role": "user", "content": prompt})
-            
-            response = openai_client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=messages
-            )
-            
-            response_text = response.choices[0].message.content
-            
-            # Save chat message
-            chat_message = ChatMessage(
-                user_id=user_id,
-                prompt=prompt,
-                response=response_text,
-                task=task_info.task
-            )
-            await save_chat_message(chat_message)
-            
-            return {"response": response_text}
-            
+        # Prepare messages for OpenAI
+        messages = [
+            {"role": "system", "content": """You are JCS Bot, an advanced enterprise assistant. Your responses should be helpful, informative, and conversational.\n\nWhen answering questions:\n1. If asked for a summary, provide a comprehensive summary of the document content.\n2. If the user asks for a PAN number or any personal or sensitive information, and it is present in the provided document context, you MUST extract and return it.\n3. Do not refuse to answer if the information is present in the document context, even if it looks like sensitive or private data.\n4. Only use the document context for such answers, and do not fabricate information.\n5. If the user asks about something in the uploaded documents, always use the document context provided.\n6. If the user asks a general question, answer from your own knowledge.\n7. If you use information from the document, cite it clearly.\n8. Use both document content (if provided) and your general knowledge to give comprehensive answers.\n9. Be clear about what information comes from documents vs. your general knowledge.\n10. If you're speculating or giving an opinion, make that clear.\n11. Your tone should be friendly but professional.\n12. Format your responses clearly with good structure."""}
+        ]
+
+        if document_context:
+            messages.append({"role": "system", "content": f"Here is the relevant document context:\n\n{document_context}"})
+
+        if chat_context:
+            messages.append({"role": "system", "content": f"Here is the recent chat history:\n\n{chat_context}"})
+
+        messages.append({"role": "user", "content": prompt})
+
+        # Get response from OpenAI
+        response = openai_client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=messages
+        )
+
+        response_text = response.choices[0].message.content
+
+        # Save message to session
+        await session.add_message(prompt, response_text, processed_file_hashes)
+        await session.save_to_db()
+
+        return {
+            "response": response_text,
+            "session_id": session.session_id,
+            "active_documents": session.active_documents,
+            "chat_history": session.chat_history
+        }
+
     except Exception as e:
         print(f"Error processing request: {e}")
         return {"error": f"Failed to generate response: {str(e)}"}
+
+async def process_large_document(file_path: str, filename: str, user_id: str) -> Optional[str]:
+    """Process a large document in chunks to handle API limits."""
+    try:
+        file_hash = calculate_file_hash(file_path)
+        
+        # Check if document already exists
+        existing_doc = await documents_collection.find_one({
+            "file_hash": file_hash,
+            "user_id": user_id
+        })
+        
+        if existing_doc:
+            print(f"Document {filename} already exists for user {user_id} with hash {file_hash}")
+            return file_hash
+        
+        # Open PDF and get total pages
+        doc = fitz.open(file_path)
+        total_pages = doc.page_count
+        print(f"Processing large document with {total_pages} pages")
+        
+        # Process in chunks of 50 pages
+        chunk_size = 50
+        all_text = []
+        all_embeddings = []
+        
+        for start_page in range(0, total_pages, chunk_size):
+            end_page = min(start_page + chunk_size, total_pages)
+            print(f"Processing pages {start_page+1} to {end_page}")
+            
+            # Extract text from chunk
+            chunk_text = ""
+            for page_num in range(start_page, end_page):
+                page = doc[page_num]
+                chunk_text += page.get_text()
+            
+            # Process chunk with OCR if needed
+            if len(chunk_text.strip()) < 100:  # If chunk has little text, use OCR
+                # Call extract_text_from_pdf with the correct number of arguments
+                chunk_text, success = await ocr_service.extract_text_from_pdf(file_path, start_page, end_page)
+                if not success:
+                    print(f"Could not extract text from pages {start_page+1} to {end_page}")
+                    continue
+            
+            all_text.append(chunk_text)
+            
+            # Create chunks and get embeddings
+            text_chunks = text_to_chunks(chunk_text)
+            for i, chunk in enumerate(text_chunks):
+                try:
+                    # Call get_embedding without await since it's not async
+                    embedding = get_embedding(chunk)
+                    if embedding:  # Only add if we got a valid embedding
+                        all_embeddings.append(embedding)
+                        
+                        # Save chunk embedding
+                        doc_embedding = DocumentEmbedding(
+                            document_hash=file_hash,
+                            chunk_id=len(all_embeddings) - 1,
+                            text=chunk,
+                            embedding=embedding,
+                            user_id=user_id
+                        )
+                        await save_document_embedding(doc_embedding)
+                except Exception as e:
+                    print(f"Error getting embedding for chunk {i}: {e}")
+                    continue
+            
+            # Add a small delay to prevent API rate limits
+            await asyncio.sleep(1)
+        
+        # Combine all text
+        full_text = "\n\n".join(all_text)
+        
+        # Save document
+        document = Document(
+            file_hash=file_hash,
+            filename=filename,
+            user_id=user_id,
+            content=full_text,
+            embeddings=all_embeddings[0] if all_embeddings else []
+        )
+        await save_document(document)
+        
+        doc.close()
+        return file_hash
+        
+    except Exception as e:
+        print(f"Error processing large document: {e}")
+        return None
 
 @router.get("/health")
 async def health_check():
@@ -486,10 +476,31 @@ async def health_check():
         "status": "healthy",
         "time": datetime.now().isoformat()
     }
-@router.get("/session/{user_id}")
-async def get_session(user_id: str):
-    # For now, just return an empty list of active documents
-    return {"active_documents": []}
+
+@router.get("/session/{session_id}")
+async def get_session(session_id: str, current_user: User = Depends(get_current_user)):
+    """Get chat session details."""
+    try:
+        session = await chat_session_manager.get_or_create_session(current_user.username, session_id)
+        return {
+            "session_id": session.session_id,
+            "active_documents": session.active_documents,
+            "last_activity": session.last_activity,
+            "chat_history": session.chat_history
+        }
+    except Exception as e:
+        print(f"Error getting session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/session/{session_id}")
+async def end_session(session_id: str, current_user: User = Depends(get_current_user)):
+    """End a chat session."""
+    try:
+        await chat_session_manager.end_session(session_id)
+        return {"message": "Session ended successfully"}
+    except Exception as e:
+        print(f"Error ending session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/documents", response_model=List[Document])
 async def get_user_documents(current_user: User = Depends(get_current_user)):

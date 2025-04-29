@@ -71,7 +71,21 @@ async def update_user_last_login(username: str) -> None:
     )
 
 async def save_document(document: Document) -> None:
-    await documents_collection.insert_one(document.dict())
+    # Check if document already exists
+    existing_doc = await documents_collection.find_one({
+        "file_hash": document.file_hash,
+        "user_id": document.user_id
+    })
+    
+    if existing_doc:
+        # Update existing document
+        await documents_collection.update_one(
+            {"file_hash": document.file_hash, "user_id": document.user_id},
+            {"$set": document.dict()}
+        )
+    else:
+        # Insert new document
+        await documents_collection.insert_one(document.dict())
 
 async def get_document(file_hash: str, user_id: str) -> Optional[Document]:
     doc = await documents_collection.find_one({
@@ -97,6 +111,6 @@ async def get_document_embeddings(document_hash: str, user_id: str) -> List[Docu
     cursor = embeddings_collection.find({
         "document_hash": document_hash,
         "user_id": user_id
-    })
+    }).sort("chunk_id", 1)
     embeddings = await cursor.to_list(length=None)
     return [DocumentEmbedding(**emb) for emb in embeddings] 

@@ -1,18 +1,11 @@
-from fastapi import FastAPI, Request
+from fastapi import Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import users, core
+from app.config import create_app
 
-app = FastAPI(title="My FastAPI App")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Remove trailing slash
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Create FastAPI app with configuration
+app = create_app()
 
 # Include routers
 app.include_router(users.router)

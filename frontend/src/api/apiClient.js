@@ -43,20 +43,56 @@ export const api = {
     }
   },
 
+  // Session management endpoints
+  getSession: async (sessionId) => {
+    try {
+      const response = await apiClient.get(`/session/${sessionId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Session Error:", error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  endSession: async (sessionId) => {
+    try {
+      const response = await apiClient.delete(`/session/${sessionId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Session Error:", error.response?.data || error.message);
+      throw error;
+    }
+  },
+
   // Document management endpoints
   listDocuments: async () => {
-    const response = await apiClient.get("/api/core/documents");
-    return response.data;
+    try {
+      const response = await apiClient.get("/documents");
+      return response.data;
+    } catch (error) {
+      console.error("Document Error:", error.response?.data || error.message);
+      throw error;
+    }
   },
 
   getDocument: async (fileHash) => {
-    const response = await apiClient.get(`/api/core/document/${fileHash}`);
-    return response.data;
+    try {
+      const response = await apiClient.get(`/documents/${fileHash}`);
+      return response.data;
+    } catch (error) {
+      console.error("Document Error:", error.response?.data || error.message);
+      throw error;
+    }
   },
 
   deleteDocument: async (fileHash) => {
-    const response = await apiClient.delete(`/documents/${fileHash}`);
-    return response.data;
+    try {
+      const response = await apiClient.delete(`/documents/${fileHash}`);
+      return response.data;
+    } catch (error) {
+      console.error("Document Error:", error.response?.data || error.message);
+      throw error;
+    }
   },
 
   // User memory endpoints
