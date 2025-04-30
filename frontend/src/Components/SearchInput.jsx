@@ -34,7 +34,7 @@ const SearchInput = ({
   };
 
   return (
-    <div className="w-full p-4 sticky bottom-0 bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-700">
+    <div className="w-4/6 p-4 sticky bottom-0 dark:bg-gray-900 dark:border-gray-700">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* Task Selection */}
@@ -101,7 +101,7 @@ const SearchInput = ({
           }}
           className="relative"
         >
-          <div className="flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm overflow-hidden transition-all duration-200">
+          <div className="flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm overflow-hidden transition-all duration-200 max-w-3xl mx-auto">
             <button
               type="button"
               onClick={handleFileUploadClick}

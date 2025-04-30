@@ -33,7 +33,7 @@ const ChatDisplay = ({ messages, isLoading }) => {
   }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-slate-50 to-white font-['Inter']">
+    <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-[#ffe9e9] via-[#fff4e6] via-35%  to-[#e8f0ff] font-['Inter']">
       <div className="max-w-4xl mx-auto space-y-6">
         {messages.length === 0 ? (
           <div className="text-center mt-24">

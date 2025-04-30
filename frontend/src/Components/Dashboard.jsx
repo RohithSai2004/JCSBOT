@@ -30,7 +30,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-gray-50">
+    <div className="relative  h-screen w-full overflow-hidden bg-gradient-to-br from-[#ffe9e9] via-[#fff4e6] via-35%  to-[#e8f0ff]">
       {/* Sidebar */}
       <Sidebar
         isOpen={isSidebarOpen}
