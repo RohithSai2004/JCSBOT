@@ -16,7 +16,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       {/* Sidebar Toggle Button */}
       <button
         onClick={toggleSidebar}
-        className={`fixed top-4 left-4 z-50 p-2 rounded-full bg-white shadow-md ${
+        className={`fixed sm:top-3 sm:left-4 top-1 left-1 z-50 p-2 rounded-full bg-white shadow-md ${
           isOpen ? 'left-64' : 'left-4'
         } transition-all duration-300`}
       >

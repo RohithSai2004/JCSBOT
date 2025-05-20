@@ -123,24 +123,26 @@ const Searchbar = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div className="flex flex-col h-full bg-gradient-to-br from-[#ffe9e9] via-[#fff4e6] via-35%  to-[#e8f0ff]">
       <ChatDisplay messages={messages} isLoading={isLoading} />
-      <SearchInput
-        query={query}
-        setQuery={setQuery}
-        handleSubmit={handleSubmit}
-        isLoading={isLoading}
-        uploadedFiles={uploadedFiles}
-        handleFileUploadClick={handleFileUploadClick}
-        fileInputRef={fileInputRef}
-        handleFileChange={handleFileChange}
-        removeFile={removeFile}
-        selectedTask={selectedTask}
-        setSelectedTask={setSelectedTask}
-        setUploadedFiles={setUploadedFiles}
-        clearConversation={clearConversation}
-        messages={messages}
-      />
+      <div className="flex justify-center">
+  <SearchInput
+    query={query}
+    setQuery={setQuery}
+    handleSubmit={handleSubmit}
+    isLoading={isLoading}
+    uploadedFiles={uploadedFiles}
+    handleFileUploadClick={handleFileUploadClick}
+    fileInputRef={fileInputRef}
+    handleFileChange={handleFileChange}
+    removeFile={removeFile}
+    selectedTask={selectedTask}
+    setSelectedTask={setSelectedTask}
+    setUploadedFiles={setUploadedFiles}
+    clearConversation={clearConversation}
+    messages={messages}
+  />
+</div>
     </div>
   );
 };
