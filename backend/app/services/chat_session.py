@@ -41,76 +41,76 @@ class ChatSession:
         ])
 
     async def get_document_context(self, prompt: str) -> str:
-        """Get relevant document context for the prompt."""
+        """Get relevant document context for the prompt. Supports page-specific queries and full-document extraction of all personal details, followed by a brief summary."""
         if not self.active_documents:
             return ""
 
         # Get query embedding
         query_embedding = get_embedding(prompt)
-        
-        # Check if the prompt is asking for a specific document
-        document_specific = False
-        target_doc = None
-        
-        # Check for document-specific queries
-        if "summary of" in prompt.lower() or "summary from" in prompt.lower():
-            # Extract document name from prompt
-            doc_name = prompt.lower().split("summary of")[-1].split("summary from")[-1].strip()
-            if doc_name:
-                # Find the document with matching name
-                for doc_hash in self.active_documents:
-                    doc = await get_document(doc_hash, self.user_id)
-                    if doc and doc.filename.lower() in doc_name or doc_name in doc.filename.lower():
-                        target_doc = doc
-                        document_specific = True
-                        break
-        
-        document_contexts = []
-        if document_specific and target_doc:
-            # Process only the specific document
-            doc_embeddings = await get_document_embeddings(target_doc.file_hash, self.user_id)
-            if doc_embeddings:
-                # Calculate similarities and get relevant chunks
-                similarities = []
-                for emb in doc_embeddings:
-                    if emb.text.strip():
-                        similarity = cosine_similarity(query_embedding, emb.embedding)
-                        similarities.append((similarity, emb.text))
-                
-                # Sort by similarity and get top chunks
-                similarities.sort(reverse=True, key=lambda x: x[0])
-                relevant_chunks = [text for _, text in similarities[:5]]  # Increased to 5 chunks for better context
-                
-                if relevant_chunks:
-                    document_contexts.append(
-                        f"Content from {target_doc.filename}:\n\n" + 
-                        "\n\n".join(relevant_chunks)
-                    )
-        else:
-            # Process all active documents
+
+        # Check for page-specific queries
+        import re
+        page_match = re.search(r'(?:page|pg|pg\\.|pgs\\.|pages)\\s*(\\d+)', prompt, re.IGNORECASE)
+        if page_match:
+            page_number = int(page_match.group(1)) - 1  # 0-based index
             for doc_hash in self.active_documents:
                 doc = await get_document(doc_hash, self.user_id)
                 if doc:
                     doc_embeddings = await get_document_embeddings(doc_hash, self.user_id)
-                    if doc_embeddings:
-                        # Calculate similarities and get relevant chunks
-                        similarities = []
-                        for emb in doc_embeddings:
-                            if emb.text.strip():
-                                similarity = cosine_similarity(query_embedding, emb.embedding)
-                                similarities.append((similarity, emb.text))
-                        
-                        # Sort by similarity and get top chunks
-                        similarities.sort(reverse=True, key=lambda x: x[0])
-                        relevant_chunks = [text for _, text in similarities[:3]]
-                        
-                        if relevant_chunks:
-                            document_contexts.append(
-                                f"Content from {doc.filename}:\n\n" + 
-                                "\n\n".join(relevant_chunks)
-                            )
+                    for emb in doc_embeddings:
+                        if emb.chunk_id == page_number:
+                            return f"Content from page {page_number+1} of {doc.filename}:\n\n{emb.text}"
+            return f"No content found for page {page_number+1}."
 
-        # Combine all document contexts
+        # Check for summary/extraction request
+        if "summary of" in prompt.lower() or "summary from" in prompt.lower():
+            doc_name = prompt.lower().split("summary of")[-1].split("summary from")[-1].strip()
+            for doc_hash in self.active_documents:
+                doc = await get_document(doc_hash, self.user_id)
+                if doc and (doc_name in doc.filename.lower() or doc.filename.lower() in doc_name):
+                    doc_embeddings = await get_document_embeddings(doc.file_hash, self.user_id)
+                    if doc_embeddings:
+                        # Sort by page number and concatenate all page texts (no filtering)
+                        doc_embeddings.sort(key=lambda x: x.chunk_id)
+                        full_text = "\n\n".join([emb.text.strip() for emb in doc_embeddings if emb.text.strip()])
+                        if not full_text:
+                            return f"No content found in {doc.filename}."
+                        # Use LLM to extract and list all personal details, then provide a brief summary
+                        from openai import OpenAI
+                        import os
+                        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                        try:
+                            response = openai_client.chat.completions.create(
+                                model="gpt-4o-mini",
+                                messages=[
+                                    {"role": "system", "content": "Extract and summarize all important details, data, and information from the following document. Do not omit any significant content, including personal information such as names, addresses, identification numbers, and any other sensitive or private data present in the document. Your summary should be as comprehensive as possible, covering every section and detail present in the document."},
+                                    {"role": "user", "content": full_text}
+                                ]
+                            )
+                            summary = response.choices[0].message.content.strip()
+                        except Exception as e:
+                            summary = f"[Error summarizing document: {str(e)}]"
+                        return f"Summary for {doc.filename}:\n\n{summary}"
+            return "No summaries found for the requested document."
+
+        # Existing logic for similarity-based context
+        document_contexts = []
+        for doc_hash in self.active_documents:
+            doc = await get_document(doc_hash, self.user_id)
+            if doc:
+                doc_embeddings = await get_document_embeddings(doc_hash, self.user_id)
+                if doc_embeddings:
+                    similarities = []
+                    for emb in doc_embeddings:
+                        if emb.text.strip():
+                            similarity = cosine_similarity(query_embedding, emb.embedding)
+                            similarities.append((similarity, emb.text))
+                    similarities.sort(reverse=True, key=lambda x: x[0])
+                    relevant_chunks = [text for _, text in similarities[:3]]
+                    if relevant_chunks:
+                        document_contexts.append(
+                            f"Content from {doc.filename}:\n\n" + "\n\n".join(relevant_chunks)
+                        )
         return "\n\n---\n\n".join(document_contexts)
 
     async def save_to_db(self):
