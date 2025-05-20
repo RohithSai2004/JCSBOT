@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import Logo from "../Assets/jaijcs.jpg";
 
 const Navbar = ({ isLoggedIn, username, handleLogout, toggleSidebar }) => {
   const navigate = useNavigate();
@@ -16,9 +17,11 @@ const Navbar = ({ isLoggedIn, username, handleLogout, toggleSidebar }) => {
         {/* Top Row (Mobile: flex-row, Medium+: separate sections) */}
         <div className="flex w-full items-center justify-between md:justify-start md:w-auto pl-7 md:pl-0 sm:pl-0 md:ml-10">
           {/* Left: Logo */}
-          <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800">
-            JCS AI
-          </h2>
+          <img
+  src={Logo}
+  alt="JCS AI Logo"
+  className="h-8 sm:h-10 md:h-16 object-contain rounded-xl"
+/>
 
           {/* Right (Mobile only): Username & Logout */}
           {isLoggedIn && (

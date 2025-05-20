@@ -16,7 +16,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       {/* Sidebar Toggle Button */}
       <button
         onClick={toggleSidebar}
-        className={`fixed sm:top-3 sm:left-4 top-1 left-1 z-50 p-2 rounded-full bg-white shadow-md ${
+        className={`fixed sm:top-4 sm:left-4 top-3 left-1 z-50 p-2 rounded-full bg-white shadow-md ${
           isOpen ? 'left-64' : 'left-4'
         } transition-all duration-300`}
       >
@@ -68,9 +68,15 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
                 </Link>
               </li>
               <li>
-                <Link to="/insights" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
-                  <FaLightbulb className="mr-3" />
-                  <span>Insights</span>
+                <Link to="/code-audit" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
+                  <FaFileAlt className="mr-3" />
+                  <span>Code Audit</span>
+                </Link>
+              </li>
+              <li>
+                <Link to="/code-generation" className="flex items-center p-3 rounded-lg hover:bg-blue-700">
+                  <FaFileAlt className="mr-3" />
+                  <span>Code Generation</span>
                 </Link>
               </li>
             </ul>
