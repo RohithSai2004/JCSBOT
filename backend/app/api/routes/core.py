@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Form, UploadFile, File, Request, HTTPException, Depends, status
+from fastapi import APIRouter, Form, UploadFile, File, Request, HTTPException, Depends, status, Response
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -286,6 +287,7 @@ async def chat(
 
         # Process new files if any
         processed_file_hashes = []
+        processed_filenames = {}  # Store filename mapping to hash
         if files:
             temp_dir = tempfile.mkdtemp()
             try:
@@ -321,6 +323,7 @@ async def chat(
                         
                     if file_hash:
                         processed_file_hashes.append(file_hash)
+                        processed_filenames[file_hash] = file.filename  # Store filename with hash
                         # Add document to active documents in session
                         if file_hash not in session.active_documents:
                             session.active_documents.append(file_hash)
@@ -339,45 +342,114 @@ async def chat(
         
         # Get document context if needed
         document_context = ""
+        used_documents = []  # Track which documents are used in the response
         if task_info.task in ["summarization", "file Q&A", "comparison"] or session.active_documents:
-            document_context = await session.get_document_context(prompt)
+            document_context, used_documents = await session.get_document_context_with_sources(prompt)
             print(f"Document context: {document_context[:200]}...")  # Log first 200 chars
+
+        # Get document names for all active documents
+        document_names = {}
+        for doc_hash in session.active_documents:
+            doc = await get_document(doc_hash, user_id)
+            if doc:
+                document_names[doc_hash] = doc.filename
+
+        # Add newly processed documents to the mapping
+        document_names.update(processed_filenames)
 
         # Prepare messages for OpenAI
         messages = [
-            {"role": "system", "content": """You are JCS Bot, an advanced enterprise assistant. Your responses should be helpful, informative, and conversational.\n\nWhen answering questions:\n1. If asked for a summary, provide a comprehensive summary of the document content.\n2. If the user asks for a PAN number or any personal or sensitive information, and it is present in the provided document context, you MUST extract and return it.\n3. Do not refuse to answer if the information is present in the document context, even if it looks like sensitive or private data.\n4. Only use the document context for such answers, and do not fabricate information.\n5. If the user asks about something in the uploaded documents, always use the document context provided.\n6. If the user asks a general question, answer from your own knowledge.\n7. If you use information from the document, cite it clearly.\n8. Use both document content (if provided) and your general knowledge to give comprehensive answers.\n9. Be clear about what information comes from documents vs. your general knowledge.\n10. If you're speculating or giving an opinion, make that clear.\n11. Your tone should be friendly but professional.\n12. Format your responses clearly with good structure."""}
+            {"role": "system", "content": """You are JCS Bot, an advanced enterprise assistant. Your responses should be helpful, informative, and conversational.\n\nWhen answering questions:\n1. If asked for a summary, provide a comprehensive summary of the document content.\n2. If the user asks for a PAN number or any personal or sensitive information, and it is present in the provided document context, you MUST extract and return it.\n3. Do not refuse to answer if the information is present in the document context, even if it looks like sensitive or private data.\n4. Only use the document context for such answers, and do not fabricate information.\n5. If the user asks about something in the uploaded documents, always use the document context provided.\n6. If the user asks a general question, answer from your own knowledge.\n7. If you use information from the document, cite it clearly.\n8. Use both document content (if provided) and your general knowledge to give comprehensive answers.\n9. Be clear about what information comes from documents vs. your general knowledge.\n10. If you're speculating or giving an opinion, make that clear.\n11. Your tone should be friendly but professional.\n12. Format your responses clearly with good structure.\n13. IMPORTANT: When referencing documents, always mention the document name in your response."""}
         ]
 
         if document_context:
-            messages.append({"role": "system", "content": f"Here is the relevant document context:\n\n{document_context}"})
+            # Add document names to context
+            doc_names_str = "\n".join([f"- {doc_hash}: {document_names.get(doc_hash, f'Document {doc_hash[:8]}...')}" for doc_hash in session.active_documents])
+            
+            messages.append({"role": "system", "content": f"Available documents:\n{doc_names_str}\n\nHere is the relevant document context:\n\n{document_context}"})
 
         if chat_context:
             messages.append({"role": "system", "content": f"Here is the recent chat history:\n\n{chat_context}"})
 
         messages.append({"role": "user", "content": prompt})
 
-        # Get response from OpenAI
-        response = openai_client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages
+        # Create an async generator for streaming
+        async def stream_openai_response():
+            try:
+                # Get streaming response from OpenAI
+                stream = openai_client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=messages,
+                    stream=True
+                )
+
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
+                        # Send the chunk as a JSON object
+                        yield f"data: {json.dumps({'chunk': content})}\n\n"
+
+            except Exception as e:
+                print(f"Error during OpenAI streaming: {e}")
+                # Yield an error chunk if streaming fails
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+        # Use an async generator to yield chunks and handle post-streaming actions
+        async def generate_response():
+            # Iterate over the streaming generator and yield its output
+            full_response_text = ""
+            async for chunk_data in stream_openai_response():
+                yield chunk_data # Yield the data lines from the streaming generator
+                # Extract the content from the chunk data line to reconstruct the full response
+                if chunk_data.strip().startswith('data: '):
+                    try:
+                        data = json.loads(chunk_data.strip()[len('data: '):])
+                        if 'chunk' in data:
+                            full_response_text += data['chunk']
+                        # If an error chunk was yielded, capture the error message
+                        if 'error' in data:
+                             full_response_text = "Error: " + data['error']
+                    except json.JSONDecodeError:
+                        print(f"Failed to decode JSON from chunk_data: {chunk_data}")
+
+            # After streaming is complete, save the message and session
+            try:
+                # Create metadata about documents used in this response
+                document_metadata = {
+                    "used_documents": used_documents,
+                    "document_names": {hash: document_names.get(hash, "Unknown") for hash in used_documents}
+                }
+                
+                await session.add_message(prompt, full_response_text, processed_file_hashes, document_metadata)
+                await session.save_to_db()
+                 
+                # Send final message with session info and document metadata
+                success_data = {
+                    'done': True, 
+                    'session_id': session.session_id, 
+                    'active_documents': session.active_documents,
+                    'document_names': document_names
+                }
+                yield f"data: {json.dumps(success_data)}\n\n"
+            except Exception as e:
+                print(f"Error saving message or session: {e}")
+                error_data = {
+                    'done': True,
+                    'session_id': session.session_id,
+                    'active_documents': session.active_documents,
+                    'error': str(e)
+                }
+                yield f"data: {json.dumps(error_data)}\n\n"
+
+        return StreamingResponse(
+            generate_response(),
+            media_type="text/event-stream"
         )
-
-        response_text = response.choices[0].message.content
-
-        # Save message to session
-        await session.add_message(prompt, response_text, processed_file_hashes)
-        await session.save_to_db()
-
-        return {
-            "response": response_text,
-            "session_id": session.session_id,
-            "active_documents": session.active_documents,
-            "chat_history": session.chat_history
-        }
 
     except Exception as e:
         print(f"Error processing request: {e}")
-        return {"error": f"Failed to generate response: {str(e)}"}
+        # Return a standard JSON error response for initial request processing errors
+        raise HTTPException(status_code=500, detail=f"Failed to process request: {str(e)}")
 
 async def process_large_document(file_path: str, filename: str, user_id: str) -> Optional[str]:
     """Process a large document in chunks to handle API limits."""
@@ -540,4 +612,24 @@ async def delete_document(file_hash: str, current_user: User = Depends(get_curre
         return {"message": "Document and associated data deleted successfully"}
     except Exception as e:
         print(f"Error deleting document: {str(e)}")  # Add logging
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/sessions")
+async def get_user_sessions(current_user: User = Depends(get_current_user)):
+    """Get all chat sessions for the current user within the last 15 days."""
+    try:
+        sessions = await chat_session_manager.get_user_sessions(current_user.username)
+        return {
+            "sessions": [
+                {
+                    "session_id": session["session_id"],
+                    "created_at": session["created_at"],
+                    "last_activity": session["last_activity"],
+                    "preview": session["chat_history"][0]["prompt"] if session["chat_history"] else "New conversation",
+                    "document_count": len(session["active_documents"])
+                }
+                for session in sessions
+            ]
+        }
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

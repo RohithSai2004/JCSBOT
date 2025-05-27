@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 
 const Chat = () => {
     const navigate = useNavigate();
+    const { sessionId } = useParams();
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [file, setFile] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [currentSessionId, setCurrentSessionId] = useState(sessionId || '');
     const messagesEndRef = useRef(null);
 
     useEffect(() => {
@@ -18,9 +20,13 @@ const Chat = () => {
             return;
         }
 
-        // Load chat history
-        loadChatHistory();
-    }, [navigate]);
+        if (sessionId) {
+            setCurrentSessionId(sessionId);
+            loadSessionChat(sessionId);
+        } else {
+            setMessages([]);
+        }
+    }, [navigate, sessionId]);
 
     useEffect(() => {
         scrollToBottom();
@@ -30,17 +36,34 @@ const Chat = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    const loadChatHistory = async () => {
+    const loadSessionChat = async (sid) => {
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:8000/chat/history', {
+            const response = await axios.get(`http://localhost:8000/session/${sid}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
             });
-            setMessages(response.data.messages || []);
+            
+            if (response.data.chat_history) {
+                const formattedMessages = response.data.chat_history.map(msg => [
+                    {
+                        isUser: true,
+                        text: msg.prompt,
+                        timestamp: msg.timestamp
+                    },
+                    {
+                        isUser: false,
+                        text: msg.response,
+                        timestamp: msg.timestamp
+                    }
+                ]).flat();
+                
+                setMessages(formattedMessages);
+            }
         } catch (err) {
-            setError('Failed to load chat history');
+            console.error('Error loading session:', err);
+            setError('Failed to load chat session');
         }
     };
 
@@ -58,9 +81,12 @@ const Chat = () => {
         try {
             const token = localStorage.getItem('token');
             const formData = new FormData();
-            formData.append('message', input);
+            formData.append('prompt', input);
             if (file) {
-                formData.append('file', file);
+                formData.append('files', file);
+            }
+            if (currentSessionId) {
+                formData.append('session_id', currentSessionId);
             }
 
             const response = await axios.post('http://localhost:8000/chat', formData, {
@@ -70,12 +96,19 @@ const Chat = () => {
                 }
             });
 
+            const timestamp = new Date().toISOString();
             setMessages(prev => [...prev, 
-                { role: 'user', content: input },
-                { role: 'assistant', content: response.data.response }
+                { isUser: true, text: input, timestamp },
+                { isUser: false, text: response.data.response, timestamp }
             ]);
             setInput('');
             setFile(null);
+
+            // Update session ID if this was a new session
+            if (!currentSessionId && response.data.session_id) {
+                setCurrentSessionId(response.data.session_id);
+                navigate(`/chat/${response.data.session_id}`, { replace: true });
+            }
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to send message');
         } finally {
@@ -109,10 +142,13 @@ const Chat = () => {
                     <div
                         key={index}
                         className={`mb-4 p-4 rounded-lg ${
-                            message.role === 'user' ? 'bg-indigo-100 ml-auto' : 'bg-gray-100'
+                            message.isUser ? 'bg-indigo-100 ml-auto' : 'bg-gray-100'
                         } max-w-2xl`}
                     >
-                        <p className="text-gray-800">{message.content}</p>
+                        <p className="text-gray-800">{message.text}</p>
+                        <div className="text-xs text-gray-500 mt-1">
+                            {new Date(message.timestamp).toLocaleTimeString()}
+                        </div>
                     </div>
                 ))}
                 <div ref={messagesEndRef} />

@@ -14,10 +14,27 @@ def create_app() -> FastAPI:
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173"],
+        allow_origins=[
+            "http://localhost:5173",
+            "http://localhost:4173",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:4173",
+            "https://*.ngrok.io",
+            "https://*.ngrok-free.app"
+        ],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "Accept",
+            "Origin",
+            "X-Requested-With",
+            "Access-Control-Request-Method",
+            "Access-Control-Request-Headers"
+        ],
+        expose_headers=["*"],
+        max_age=3600
     )
 
     # Configure trusted hosts

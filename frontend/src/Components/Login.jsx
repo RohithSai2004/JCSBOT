@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import apiClient from '../api/apiClient';
 import Navbar from './Navbar';
 
 const Login = () => {
@@ -29,7 +29,7 @@ const Login = () => {
       formDataToSend.append('username', formData.username);
       formDataToSend.append('password', formData.password);
 
-      const response = await axios.post('http://localhost:8000/token', formDataToSend, {
+      const response = await apiClient.post('/token', formDataToSend, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         }
@@ -87,7 +87,7 @@ const Login = () => {
               <input type="checkbox" className="mr-2" />
               Remember me
             </label>
-            <a href="#" className="text-sm text-indigo-500 hover:underline">
+            <a href="/forgot-password" className="text-sm text-indigo-500 hover:underline">
               Forgot password?
             </a>
           </div>
@@ -100,7 +100,7 @@ const Login = () => {
           </button>
         </form>
         <p className="text-center text-sm text-gray-600 mt-6">
-          Don’t have an account?
+          Don't have an account?
           <a href="/signup" className="text-indigo-500 font-semibold ml-1 hover:underline">
             Sign up
           </a>

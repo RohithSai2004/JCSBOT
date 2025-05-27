@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import {
   FaMicrophone,
   FaPaperPlane,
@@ -10,6 +10,32 @@ import {
   BsFileEarmarkPdf,
   BsFileEarmarkImage,
 } from "react-icons/bs";
+import debounce from 'lodash/debounce';
+
+const FileIcon = React.memo(({ fileType }) => {
+  if (fileType.includes("pdf")) return <BsFileEarmarkPdf className="text-red-500" />;
+  if (fileType.includes("image")) return <BsFileEarmarkImage className="text-blue-500" />;
+  return <BsFileEarmarkText className="text-gray-500" />;
+});
+
+const FilePreview = React.memo(({ file, index, removeFile }) => (
+  <div
+    className="flex-shrink-0 border rounded-xl px-3 py-2 bg-white shadow-md flex items-center gap-2 min-w-[160px] transition hover:shadow-lg dark:bg-gray-800 dark:border-gray-700"
+  >
+    <div className="p-2 bg-gray-100 rounded-full dark:bg-gray-700">
+      <FileIcon fileType={file.type} />
+    </div>
+    <div className="text-sm max-w-[120px] truncate dark:text-white">
+      {file.name}
+    </div>
+    <button
+      onClick={() => removeFile(index)}
+      className="text-gray-400 hover:text-red-500 transition ml-1"
+    >
+      <FaTrash size={12} />
+    </button>
+  </div>
+));
 
 const SearchInput = ({
   query,
@@ -27,33 +53,88 @@ const SearchInput = ({
   clearConversation,
   messages,
 }) => {
-  const getFileIcon = (fileType) => {
-    if (fileType.includes("pdf")) return <BsFileEarmarkPdf className="text-red-500" />;
-    if (fileType.includes("image")) return <BsFileEarmarkImage className="text-blue-500" />;
-    return <BsFileEarmarkText className="text-gray-500" />;
-  };
+  // Debounced query update with useCallback
+  const debouncedSetQuery = useCallback(
+    debounce((value) => {
+      setQuery(value);
+    }, 100),
+    [setQuery]
+  );
+
+  const handleFormSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    const trimmedQuery = query.trim();
+    const effectiveQuery =
+      !trimmedQuery && selectedTask === "summarization"
+        ? "Summarize the uploaded document"
+        : trimmedQuery;
+    if (!effectiveQuery) return;
+    
+    // Clear the query immediately after submission
+    setQuery("");
+    await handleSubmit(effectiveQuery);
+  }, [query, selectedTask, handleSubmit, setQuery]);
+
+  const handleQueryChange = useCallback((e) => {
+    const value = e.target.value;
+    // Update query state directly
+    setQuery(value);
+  }, [setQuery]);
+
+  const handleTaskChange = useCallback((e) => {
+    setSelectedTask(e.target.value);
+  }, [setSelectedTask]);
+
+  const handleClearFiles = useCallback(() => {
+    setUploadedFiles([]);
+  }, [setUploadedFiles]);
+
+  const taskOptions = useMemo(() => (
+    <>
+      <option value="file Q&A">Ask about document</option>
+      <option value="summarization">Summarize document</option>
+      {uploadedFiles.length > 1 && (
+        <option value="comparison">Compare documents</option>
+      )}
+      <option value="data analysis and forecast">Analyze data</option>
+    </>
+  ), [uploadedFiles.length]);
+
+  const inputPlaceholder = useMemo(() => {
+    if (uploadedFiles.length > 0) {
+      return selectedTask === "summarization"
+        ? "Add specific instructions for summarization..."
+        : "Ask about the document...";
+    }
+    return "Ask anything or upload documents...";
+  }, [uploadedFiles.length, selectedTask]);
+
+  // Memoize the file previews list
+  const filePreviews = useMemo(() => (
+    uploadedFiles.map((file, index) => (
+      <FilePreview
+        key={`${file.name}-${index}`}
+        file={file}
+        index={index}
+        removeFile={removeFile}
+      />
+    ))
+  ), [uploadedFiles, removeFile]);
 
   return (
     <div className="w-4/6 p-4 sticky bottom-0 dark:bg-gray-900 dark:border-gray-700">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-
-        {/* Task Selection */}
         {uploadedFiles.length > 0 && (
           <div className="flex items-center gap-3 mb-3">
             <select
               value={selectedTask}
-              onChange={(e) => setSelectedTask(e.target.value)}
+              onChange={handleTaskChange}
               className="px-4 py-2 text-sm rounded-lg border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-800 dark:border-gray-600 dark:text-white"
             >
-              <option value="file Q&A">Ask about document</option>
-              <option value="summarization">Summarize document</option>
-              {uploadedFiles.length > 1 && (
-                <option value="comparison">Compare documents</option>
-              )}
-              <option value="data analysis and forecast">Analyze data</option>
+              {taskOptions}
             </select>
             <button
-              onClick={() => setUploadedFiles([])}
+              onClick={handleClearFiles}
               className="text-sm text-red-500 hover:text-red-700 transition flex items-center gap-1"
             >
               <FaTrash size={12} /> Clear files
@@ -61,46 +142,13 @@ const SearchInput = ({
           </div>
         )}
 
-        {/* File Previews */}
         {uploadedFiles.length > 0 && (
           <div className="flex gap-3 overflow-x-auto pb-3">
-            {uploadedFiles.map((file, index) => (
-              <div
-                key={index}
-                className="flex-shrink-0 border rounded-xl px-3 py-2 bg-white shadow-md flex items-center gap-2 min-w-[160px] transition hover:shadow-lg dark:bg-gray-800 dark:border-gray-700"
-              >
-                <div className="p-2 bg-gray-100 rounded-full dark:bg-gray-700">
-                  {getFileIcon(file.type)}
-                </div>
-                <div className="text-sm max-w-[120px] truncate dark:text-white">
-                  {file.name}
-                </div>
-                <button
-                  onClick={() => removeFile(index)}
-                  className="text-gray-400 hover:text-red-500 transition ml-1"
-                >
-                  <FaTrash size={12} />
-                </button>
-              </div>
-            ))}
+            {filePreviews}
           </div>
         )}
 
-        {/* Input Form */}
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const trimmedQuery = query.trim();
-            const effectiveQuery =
-              !trimmedQuery && selectedTask === "summarization"
-                ? "Summarize the uploaded document"
-                : trimmedQuery;
-            if (!effectiveQuery) return;
-            await handleSubmit(effectiveQuery);
-            setQuery("");
-          }}
-          className="relative"
-        >
+        <form onSubmit={handleFormSubmit} className="relative">
           <div className="flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm overflow-hidden transition-all duration-200 max-w-3xl mx-auto">
             <button
               type="button"
@@ -123,14 +171,8 @@ const SearchInput = ({
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={
-                uploadedFiles.length > 0
-                  ? selectedTask === "summarization"
-                    ? "Add specific instructions for summarization..."
-                    : "Ask about the document..."
-                  : "Ask anything or upload documents..."
-              }
+              onChange={handleQueryChange}
+              placeholder={inputPlaceholder}
               className="flex-1 px-4 py-3 bg-transparent outline-none dark:text-white"
               disabled={isLoading}
             />
@@ -162,7 +204,6 @@ const SearchInput = ({
           </div>
         </form>
 
-        {/* Clear conversation button */}
         {messages.length > 0 && (
           <div className="flex justify-center mt-3">
             <button
@@ -178,4 +219,4 @@ const SearchInput = ({
   );
 };
 
-export default SearchInput;
+export default React.memo(SearchInput);

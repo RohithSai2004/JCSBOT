@@ -2,8 +2,8 @@
 
 import axios from "axios";
 
-// Base API URL - configure based on your environment
-const API_BASE_URL = "http://localhost:8000";
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = "/api";
 
 // Create axios instance with default config
 const apiClient = axios.create({
@@ -26,20 +26,86 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Add response interceptor to handle token expiration
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 // API endpoints
 export const api = {
   // Chat endpoint
-  sendMessage: async (formData) => {
+  sendMessage: async (formData, options = {}) => {
     try {
-      const response = await apiClient.post("/chat", formData, {
+      const response = await fetch(`${API_BASE_URL}/chat`, {
+        method: 'POST',
         headers: {
-          "Content-Type": "multipart/form-data", // Override for multipart uploads
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
+        body: formData,
+        signal: options.signal,
       });
-      return response.data;
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let responseText = '';
+      let sessionInfo = null;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.chunk) {
+                responseText += data.chunk;
+                if (options.onChunk) {
+                  options.onChunk(data.chunk);
+                }
+              }
+              
+              if (data.done) {
+                sessionInfo = {
+                  session_id: data.session_id,
+                  active_documents: data.active_documents
+                };
+              }
+              
+              if (data.error) {
+                throw new Error(data.error);
+              }
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          }
+        }
+      }
+
+      return {
+        response: responseText,
+        ...sessionInfo
+      };
     } catch (error) {
-      console.error("API Error:", error.response?.data || error.message);
-      throw error;
+      if (error.name === 'AbortError') {
+        throw error;
+      }
+      throw new Error(error.message || 'Failed to send message');
     }
   },
 
@@ -97,12 +163,12 @@ export const api = {
 
   // User memory endpoints
   getUserMemory: async (userId, limit = 10) => {
-    const response = await apiClient.get(`/api/core/memory/${userId}?limit=${limit}`);
+    const response = await apiClient.get(`/memory/${userId}?limit=${limit}`);
     return response.data;
   },
 
   clearUserMemory: async (userId) => {
-    const response = await apiClient.delete(`/api/core/memory/${userId}`);
+    const response = await apiClient.delete(`/memory/${userId}`);
     return response.data;
   },
 };

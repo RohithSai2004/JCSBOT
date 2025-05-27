@@ -1,5 +1,5 @@
-from typing import Dict, List, Optional
-from datetime import datetime
+from typing import Dict, List, Optional, Tuple
+from datetime import datetime, timedelta
 import uuid
 import numpy as np
 from app.db.mongodb import (
@@ -19,17 +19,29 @@ class ChatSession:
         self.active_documents: List[str] = []  # List of document hashes
         self.chat_history: List[Dict] = []
 
-    async def add_message(self, prompt: str, response: str, document_hashes: Optional[List[str]] = None):
+    async def add_message(self, prompt: str, response: str, document_hashes: Optional[List[str]] = None, document_metadata: Optional[Dict] = None):
         """Add a message to the chat history."""
+        # Only add message if prompt or response is not empty
+        if not prompt.strip() and not response.strip():
+            return
+            
+        timestamp = datetime.now().isoformat()
         message = {
             "prompt": prompt,
             "response": response,
+            "timestamp": timestamp,
             "document_hashes": document_hashes or [],
-            "timestamp": datetime.now()
+            "document_metadata": document_metadata or {}
         }
         self.chat_history.append(message)
-        self.last_activity = datetime.now()
-        # Save to DB after each message
+        self.last_activity = timestamp
+        
+        # If documents were referenced, add them to active documents
+        if document_hashes:
+            for doc_hash in document_hashes:
+                if doc_hash not in self.active_documents:
+                    self.active_documents.append(doc_hash)
+                    
         await self.save_to_db()
 
     async def get_context(self, limit: int = 5) -> str:
@@ -40,89 +52,70 @@ class ChatSession:
             for msg in recent_messages
         ])
 
-    async def get_document_context(self, prompt: str) -> str:
-        """Get relevant document context for the prompt. Supports page-specific queries and full-document extraction of all personal details, followed by a brief summary."""
+    async def get_document_context_with_sources(self, prompt: str) -> Tuple[str, List[str]]:
+        """Get relevant document context based on the prompt and return used document hashes."""
         if not self.active_documents:
-            return ""
-
-        # Get query embedding
-        query_embedding = get_embedding(prompt)
-
-        # Check for page-specific queries
-        import re
-        page_match = re.search(r'(?:page|pg|pg\\.|pgs\\.|pages)\\s*(\\d+)', prompt, re.IGNORECASE)
-        if page_match:
-            page_number = int(page_match.group(1)) - 1  # 0-based index
-            for doc_hash in self.active_documents:
-                doc = await get_document(doc_hash, self.user_id)
-                if doc:
-                    doc_embeddings = await get_document_embeddings(doc_hash, self.user_id)
-                    for emb in doc_embeddings:
-                        if emb.chunk_id == page_number:
-                            return f"Content from page {page_number+1} of {doc.filename}:\n\n{emb.text}"
-            return f"No content found for page {page_number+1}."
-
-        # Check for summary/extraction request
-        if "summary of" in prompt.lower() or "summary from" in prompt.lower():
-            doc_name = prompt.lower().split("summary of")[-1].split("summary from")[-1].strip()
-            for doc_hash in self.active_documents:
-                doc = await get_document(doc_hash, self.user_id)
-                if doc and (doc_name in doc.filename.lower() or doc.filename.lower() in doc_name):
-                    doc_embeddings = await get_document_embeddings(doc.file_hash, self.user_id)
-                    if doc_embeddings:
-                        # Sort by page number and concatenate all page texts (no filtering)
-                        doc_embeddings.sort(key=lambda x: x.chunk_id)
-                        full_text = "\n\n".join([emb.text.strip() for emb in doc_embeddings if emb.text.strip()])
-                        if not full_text:
-                            return f"No content found in {doc.filename}."
-                        # Use LLM to extract and list all personal details, then provide a brief summary
-                        from openai import OpenAI
-                        import os
-                        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                        try:
-                            response = openai_client.chat.completions.create(
-                                model="gpt-4o-mini",
-                                messages=[
-                                    {"role": "system", "content": "Extract and summarize all important details, data, and information from the following document. Do not omit any significant content, including personal information such as names, addresses, identification numbers, and any other sensitive or private data present in the document. Your summary should be as comprehensive as possible, covering every section and detail present in the document."},
-                                    {"role": "user", "content": full_text}
-                                ]
-                            )
-                            summary = response.choices[0].message.content.strip()
-                        except Exception as e:
-                            summary = f"[Error summarizing document: {str(e)}]"
-                        return f"Summary for {doc.filename}:\n\n{summary}"
-            return "No summaries found for the requested document."
-
-        # Existing logic for similarity-based context
+            return "", []
+        
+        # Get embedding for the prompt
+        prompt_embedding = get_embedding(prompt)
+        
+        # Get all document embeddings for active documents
         document_contexts = []
+        used_documents = set()
+        
         for doc_hash in self.active_documents:
-            doc = await get_document(doc_hash, self.user_id)
-            if doc:
-                doc_embeddings = await get_document_embeddings(doc_hash, self.user_id)
-                if doc_embeddings:
-                    similarities = []
-                    for emb in doc_embeddings:
-                        if emb.text.strip():
-                            similarity = cosine_similarity(query_embedding, emb.embedding)
-                            similarities.append((similarity, emb.text))
-                    similarities.sort(reverse=True, key=lambda x: x[0])
-                    relevant_chunks = [text for _, text in similarities[:3]]
-                    if relevant_chunks:
-                        document_contexts.append(
-                            f"Content from {doc.filename}:\n\n" + "\n\n".join(relevant_chunks)
-                        )
-        return "\n\n---\n\n".join(document_contexts)
+            # Get document embeddings
+            embeddings = await get_document_embeddings(doc_hash, self.user_id)
+            
+            if not embeddings:
+                continue
+            
+            # Find most similar chunks
+            similarities = []
+            for embedding in embeddings:
+                similarity = cosine_similarity(prompt_embedding, embedding.embedding)
+                similarities.append((similarity, embedding))
+            
+            # Sort by similarity and take top 3
+            similarities.sort(reverse=True, key=lambda x: x[0])
+            top_chunks = similarities[:3]
+            
+            # If any chunk is relevant enough (similarity > 0.7), add it to context
+            relevant_chunks = [chunk for sim, chunk in top_chunks if sim > 0.7]
+            
+            if relevant_chunks:
+                for chunk in relevant_chunks:
+                    document_contexts.append(f"Document {doc_hash} (Chunk {chunk.chunk_id}):\n{chunk.text}\n")
+                    used_documents.add(doc_hash)
+            
+            # If no chunks are relevant enough but this is the only document, include top chunk anyway
+            elif len(self.active_documents) == 1 and top_chunks:
+                top_chunk = top_chunks[0][1]
+                document_contexts.append(f"Document {doc_hash} (Chunk {top_chunk.chunk_id}):\n{top_chunk.text}\n")
+                used_documents.add(doc_hash)
+        
+        # Combine all contexts
+        combined_context = "\n".join(document_contexts)
+        
+        return combined_context, list(used_documents)
 
     async def save_to_db(self):
-        """Save chat session to database."""
+        """Save the session to the database."""
+        # Skip saving if there's no chat history
+        if not self.chat_history:
+            return
+            
         session_data = {
             "session_id": self.session_id,
             "user_id": self.user_id,
             "created_at": self.created_at,
             "last_activity": self.last_activity,
-            "active_documents": self.active_documents,
-            "chat_history": self.chat_history
+            "chat_history": self.chat_history,
+            "active_documents": self.active_documents
         }
+        
+        # Use upsert to create or update
         await chat_history_collection.update_one(
             {"session_id": self.session_id},
             {"$set": session_data},
@@ -172,6 +165,18 @@ class ChatSessionManager:
         self.sessions[session.session_id] = session
         await session.save_to_db()
         return session
+
+    async def get_user_sessions(self, user_id: str, days: int = 15) -> List[Dict]:
+        """Get all sessions for a user within the specified number of days."""
+        cutoff_date = datetime.now() - timedelta(days=days)
+        
+        cursor = chat_history_collection.find({
+            "user_id": user_id,
+            "last_activity": {"$gte": cutoff_date}
+        }).sort("last_activity", -1)  # Sort by most recent first
+        
+        sessions = await cursor.to_list(length=None)
+        return sessions
 
     async def end_session(self, session_id: str):
         """End a chat session."""

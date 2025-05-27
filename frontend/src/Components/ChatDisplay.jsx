@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { PiUserCircleLight, PiRobotLight } from "react-icons/pi";
+import { BsFileEarmarkText, BsFileEarmarkPdf, BsFileEarmarkImage } from "react-icons/bs";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -25,12 +26,109 @@ const colorStyles = {
   },
 };
 
+const FileIcon = React.memo(({ fileType }) => {
+  if (fileType.includes("pdf")) return <BsFileEarmarkPdf className="text-red-500" />;
+  if (fileType.includes("image")) return <BsFileEarmarkImage className="text-blue-500" />;
+  return <BsFileEarmarkText className="text-gray-500" />;
+});
+
+const FileAttachment = React.memo(({ file }) => (
+  <div className="flex items-center gap-2 mt-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
+    <div className="p-2 bg-gray-100 rounded-full">
+      <FileIcon fileType={file.type} />
+    </div>
+    <div className="text-sm text-gray-600 truncate max-w-[200px]">
+      {file.name}
+    </div>
+  </div>
+));
+
 const ChatDisplay = ({ messages, isLoading }) => {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const renderMessageContent = (msg) => (
+    <>
+      <ReactMarkdown
+        children={msg.text}
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeHighlight]}
+        components={{
+          h1: ({ node, ...props }) => (
+            <h1 className="text-2xl font-bold mt-4 mb-2 flex items-center space-x-2" {...props}>
+              <span>{props.children}</span>
+            </h1>
+          ),
+          h2: ({ node, ...props }) => (
+            <h2 className="text-xl font-semibold mt-3 mb-2 flex items-center space-x-2" {...props}>
+              <span>{props.children}</span>
+            </h2>
+          ),
+          h3: ({ node, ...props }) => (
+            <h3 className="text-lg font-medium mt-2 mb-1 flex items-center space-x-2" {...props}>
+              <span>{props.children}</span>
+            </h3>
+          ),
+          p: ({ node, ...props }) => <p className="mb-2" {...props} />,
+          code: ({ node, inline, className, children, ...props }) =>
+            inline ? (
+              <code className="bg-gray-100 px-1.5 py-1 rounded-md text-[14px]" {...props}>
+                {children}
+              </code>
+            ) : (
+              <pre className="bg-gray-900 text-white text-[14px] p-4 rounded-xl overflow-x-auto my-3">
+                <code {...props}>{children}</code>
+              </pre>
+            ),
+          ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-2 pl-4" {...props} />,
+          ol: ({ node, ...props }) => <ol className="list-decimal list-outside mb-2 pl-6" {...props} />,
+          li: ({ node, ...props }) => <li className="mb-1" {...props} />,
+        }}
+      />
+      
+      {/* Show file attachments if present */}
+      {msg.files && msg.files.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {msg.files.map((file, fileIndex) => (
+            <FileAttachment key={fileIndex} file={file} />
+          ))}
+        </div>
+      )}
+      
+      {/* Show typing indicator if message is streaming */}
+      {msg.isStreaming && (
+        <div className="flex space-x-1 mt-2">
+          {[0, 0.15, 0.3].map((delay, i) => (
+            <motion.div
+              key={i}
+              className="w-1.5 h-1.5 bg-gray-400 rounded-full"
+              animate={{ y: [0, -4, 0] }}
+              transition={{
+                duration: 0.7,
+                repeat: Infinity,
+                repeatDelay: 0.2,
+                delay,
+              }}
+            />
+          ))}
+        </div>
+      )}
+      
+      <div
+        className={`text-[11px] mt-2 ${
+          msg.isUser ? "text-sky-100" : "text-gray-500"
+        } text-right`}
+      >
+        {new Date(msg.timestamp).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+      </div>
+    </>
+  );
 
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-br from-[#ffe9e9] via-[#fff4e6] via-35%  to-[#e8f0ff] font-['Inter']">
@@ -76,99 +174,27 @@ const ChatDisplay = ({ messages, isLoading }) => {
               transition={{ duration: 0.25, delay: index * 0.04 }}
               className={`flex ${msg.isUser ? "justify-end" : "justify-start"}`}
             >
-              <div className={`flex max-w-[80%] ${msg.isUser ? "flex-row-reverse" : "flex-row"} items-end gap-3`}>
+              <div className={`flex max-w-[80%] ${msg.isUser ? "flex-row-reverse" : "flex-row"} items-start gap-3`}>
                 <div
-                  className={`rounded-full p-2 ${
-                    msg.isUser ? "bg-sky-100 text-sky-600" : "bg-violet-100 text-violet-600"
+                  className={`rounded-full p-2 border border-gray-200 shadow-sm ${
+                    msg.isUser ? "bg-white text-sky-600" : "bg-white text-violet-600"
                   }`}
                 >
                   {msg.isUser ? <PiUserCircleLight size={24} /> : <PiRobotLight size={24} />}
                 </div>
 
                 <div
-                  className={`p-5 rounded-3xl backdrop-blur-lg ${
+                  className={`p-4 rounded-xl shadow-sm ${
                     msg.isUser
-                      ? "bg-sky-500/90 text-white rounded-br-none"
-                      : "bg-white/90 border border-gray-200 text-gray-800 rounded-bl-none shadow-md"
-                  } text-[16px] leading-relaxed`}
+                      ? "bg-blue-500 text-white rounded-br-none"
+                      : "bg-gray-100 text-gray-800 rounded-bl-none border border-gray-200"
+                  } text-[15px] leading-relaxed`}
                 >
-                  <ReactMarkdown
-                    children={msg.text}
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeHighlight]}
-                    components={{
-                      h1: ({ node, ...props }) => (
-                        <h1 className="text-2xl font-bold mt-4 mb-2 flex items-center space-x-2" {...props}>
-                          <span>{props.children}</span>
-                        </h1>
-                      ),
-                      h2: ({ node, ...props }) => (
-                        <h2 className="text-xl font-semibold mt-3 mb-2 flex items-center space-x-2" {...props}>
-                          <span>{props.children}</span>
-                        </h2>
-                      ),
-                      h3: ({ node, ...props }) => (
-                        <h3 className="text-lg font-medium mt-2 mb-1 flex items-center space-x-2" {...props}>
-                          <span>{props.children}</span>
-                        </h3>
-                      ),
-                      p: ({ node, ...props }) => <p className="mb-2" {...props} />,
-                      code: ({ node, inline, className, children, ...props }) =>
-                        inline ? (
-                          <code className="bg-gray-100 px-1.5 py-1 rounded-md text-[14px]" {...props}>
-                            {children}
-                          </code>
-                        ) : (
-                          <pre className="bg-gray-900 text-white text-[14px] p-4 rounded-xl overflow-x-auto my-3">
-                            <code {...props}>{children}</code>
-                          </pre>
-                        ),
-                      ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-2 pl-4" {...props} />,
-                      ol: ({ node, ...props }) => <ol className="list-decimal list-outside mb-2 pl-6" {...props} />,
-                      li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-                    }}
-                  />
-                  <div
-                    className={`text-[11px] mt-2 ${
-                      msg.isUser ? "text-sky-100" : "text-gray-500"
-                    } text-right`}
-                  >
-                    {new Date(msg.timestamp).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </div>
+                  {renderMessageContent(msg)}
                 </div>
               </div>
             </motion.div>
           ))
-        )}
-
-        {isLoading && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
-            <div className="flex items-end gap-3">
-              <div className="rounded-full p-2 bg-violet-100 text-violet-600">
-                <PiRobotLight size={24} />
-              </div>
-              <div className="p-5 bg-white/90 backdrop-blur-lg border border-gray-200 rounded-3xl rounded-bl-none shadow-md">
-                <div className="flex space-x-1">
-                  {[0, 0.15, 0.3].map((delay, i) => (
-                    <motion.div
-                      key={i}
-                      className="w-2.5 h-2.5 bg-gray-400 rounded-full"
-                      animate={{ y: [0, -6, 0] }}
-                      transition={{
-                        duration: 0.7,
-                        repeat: Infinity,
-                        repeatDelay: 0.2,
-                        delay,
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          </motion.div>
         )}
 
         <div ref={messagesEndRef} />

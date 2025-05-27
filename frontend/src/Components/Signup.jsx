@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import apiClient from '../api/apiClient';
 import Navbar from './Navbar';
 
 const Signup = () => {
@@ -39,7 +39,7 @@ const Signup = () => {
       formDataToSend.append('password', formData.password);
       formDataToSend.append('full_name', formData.full_name);
 
-      await axios.post('http://localhost:8000/register', formDataToSend, {
+      await apiClient.post('/register', formDataToSend, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
         }
