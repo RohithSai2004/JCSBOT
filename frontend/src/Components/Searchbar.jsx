@@ -1,12 +1,12 @@
+// rohithsai2004/jcsbot/JCSBOT-c968a16baaf78ba3a848fd197258c78786a45076/frontend/src/Components/Searchbar.jsx
 import { useNavigate } from "react-router-dom";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import ChatDisplay from "./ChatDisplay";
 import { api } from "../api/apiClient";
 import apiClient from "../api/apiClient";
 import SearchInput from "./SearchInput";
-import debounce from 'lodash/debounce';
+// import debounce from 'lodash/debounce'; // Not used directly in this version of Searchbar
 
-// Function to generate a random session ID
 function generateSessionId() {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
@@ -22,222 +22,173 @@ const Searchbar = ({ sessionId, initialMessage, initialResponse, selectedTask: i
   const [activeDocuments, setActiveDocuments] = useState([]);
   const fileInputRef = useRef(null);
   const abortControllerRef = useRef(null);
-  const messagesEndRef = useRef(null);
 
-  // Memoize the loadSessionData function
   const loadSessionData = useCallback(async (sid) => {
     setIsLoading(true);
     try {
       const response = await apiClient.get(`/session/${sid}`);
-      
       if (response.data.chat_history && response.data.chat_history.length > 0) {
-        // Process messages in chunks to avoid UI blocking
-        const chunkSize = 50;
-        const formattedMessages = [];
-        
-        for (let i = 0; i < response.data.chat_history.length; i += chunkSize) {
-          const chunk = response.data.chat_history.slice(i, i + chunkSize);
-          const chunkMessages = chunk.map(msg => ({
-            text: msg.prompt,
-            isUser: true,
-            timestamp: new Date(msg.timestamp)
-          })).flatMap((userMsg, j) => {
-            const botMsg = chunk[j] ? {
-              text: chunk[j].response,
-              isUser: false,
-              timestamp: new Date(chunk[j].timestamp)
-            } : null;
-            return botMsg ? [userMsg, botMsg] : [userMsg];
-          });
-          
-          formattedMessages.push(...chunkMessages);
-          
-          // Update state in chunks to keep UI responsive
-          if (i === 0) {
-            setMessages(chunkMessages);
-          } else {
-            setMessages(prev => [...prev, ...chunkMessages]);
-          }
-          
-          // Allow UI to update between chunks
-          await new Promise(resolve => setTimeout(resolve, 0));
-        }
-        
+        const formattedMessages = response.data.chat_history.map(msg => ({
+          text: msg.prompt,
+          isUser: true,
+          timestamp: new Date(msg.timestamp),
+          files: msg.document_metadata?.original_files || [], // Assuming files were stored this way
+        })).flatMap((userMsg, j) => {
+          const botMsgData = response.data.chat_history[j];
+          const botMsg = botMsgData ? {
+            text: botMsgData.response,
+            isUser: false,
+            timestamp: new Date(botMsgData.timestamp),
+            // Potentially add bot-specific metadata if available
+          } : null;
+          return botMsg ? [userMsg, botMsg] : [userMsg];
+        });
+        setMessages(formattedMessages);
         setActiveDocuments(response.data.active_documents || []);
-        
-        // If task type is available in the response, set it
-        if (response.data.task) {
-          setSelectedTask(response.data.task);
-        }
+        if (response.data.task) setSelectedTask(response.data.task);
+      } else {
+        setMessages([]);
+        setActiveDocuments([]);
       }
     } catch (error) {
       console.error("Error loading session data:", error);
+      setMessages([]);
+      setActiveDocuments([]);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // Debounced query update
-  const debouncedSetQuery = useMemo(
-    () => debounce((value) => setQuery(value), 100),
-    []
-  );
-
   useEffect(() => {
-    // Handle initial messages if provided
-    if (initialMessage && initialResponse) {
-      setMessages([initialMessage, initialResponse]);
+    let newMessages = [];
+    if (initialMessage) {
+        newMessages.push(initialMessage);
+        if (initialResponse) {
+            newMessages.push(initialResponse);
+        }
     }
-    
+
     if (sessionId) {
-      setCurrentSessionId(sessionId);
-      loadSessionData(sessionId);
-    } else {
-      setCurrentSessionId(generateSessionId());
-      // Only reset messages if we don't have initial messages
-      if (!initialMessage && !initialResponse) {
-        setMessages([]);
+      if (sessionId !== currentSessionId || (initialMessage && messages.length === 0) ) {
+        setCurrentSessionId(sessionId);
+        if (newMessages.length > 0) {
+            setMessages(newMessages); // Set initial messages if provided
+            // If loading session data, decide if these initial messages should be overwritten or appended
+            loadSessionData(sessionId); // This might overwrite, adjust if needed
+        } else {
+            loadSessionData(sessionId);
+        }
+
       }
+    } else {
+      const newSid = generateSessionId();
+      setCurrentSessionId(newSid);
+      setMessages(newMessages.length > 0 ? newMessages : []);
       setActiveDocuments([]);
       setUploadedFiles([]);
     }
-  }, [sessionId, loadSessionData, initialMessage, initialResponse]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, initialMessage, initialResponse]); // currentSessionId removed to prevent loop with navigate
 
-  // Cleanup function for abort controller
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      if (abortControllerRef.current) abortControllerRef.current.abort();
     };
   }, []);
 
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
-
   const handleSubmit = useCallback(async (queryToSend) => {
     if (!queryToSend.trim() && uploadedFiles.length === 0) return;
-    
-    // Cancel any ongoing request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    // Create new abort controller
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
-    
-    // Create message with file information
-    const newMessage = { 
+
+    const userMessage = {
       text: queryToSend,
-      isUser: true, 
+      isUser: true,
       timestamp: new Date(),
-      files: uploadedFiles.map(file => ({
-        name: file.name,
-        type: file.type,
-        url: file.url
-      }))
+      files: uploadedFiles.map(file => ({ name: file.name, type: file.type, url: file.url }))
     };
-    
-    setMessages(prev => [...prev, newMessage]);
+
+    // Add user message and bot placeholder atomically
+    setMessages(prevMessages => [
+        ...prevMessages,
+        userMessage,
+        { text: "", isUser: false, timestamp: new Date(), isStreaming: true, id: `bot-${Date.now()}` } // Added unique id for targeting
+    ]);
     setIsLoading(true);
 
     const formData = new FormData();
     formData.append("prompt", queryToSend);
     formData.append("session_id", currentSessionId);
     formData.append("task", selectedTask);
-    
     uploadedFiles.forEach(file => {
-      if (file.rawFile) {
-        formData.append("files", file.rawFile);
-      }
+      if (file.rawFile) formData.append("files", file.rawFile);
     });
 
-    try {
-      // Add a placeholder message for the response
-      const responseMessage = {
-        text: "",
-        isUser: false,
-        timestamp: new Date(),
-        isStreaming: true
-      };
-      setMessages(prev => [...prev, responseMessage]);
+    let fullBotResponseText = ""; // Accumulate full response here
 
-      const response = await api.sendMessage(formData, {
+    try {
+      const apiResponse = await api.sendMessage(formData, { // Renamed to apiResponse to avoid conflict
         signal: abortControllerRef.current.signal,
         onChunk: (chunk) => {
-          // Update the last message with the new chunk
-          console.log('Received chunk:', chunk);
-          setMessages(prev => {
-            const newMessages = [...prev];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage && !lastMessage.isUser) {
-              lastMessage.text += chunk;
-              console.log('Updated last message with chunk:', lastMessage.text);
-            }
-            return newMessages;
-          });
+          fullBotResponseText += chunk; // Accumulate chunk
+          setMessages(prevMessages =>
+            prevMessages.map(msg =>
+              msg.isStreaming && !msg.isUser // Target the streaming bot message
+                ? { ...msg, text: msg.text + chunk }
+                : msg
+            )
+          );
         }
       });
       
-      console.log('sendMessage completed. Response:', response);
-      if (response.error) {
-        setMessages(prev => {
-          const newMessages = [...prev];
-          const lastMessage = newMessages[newMessages.length - 1];
-          if (lastMessage && !lastMessage.isUser) {
-            lastMessage.text = `Error: ${response.error}`;
-            lastMessage.isStreaming = false;
-          }
-          return newMessages;
-        });
-      } else {
-        // Update the final message
-        setMessages(prev => {
-          const newMessages = [...prev];
-          const lastMessage = newMessages[newMessages.length - 1];
-          if (lastMessage && !lastMessage.isUser) {
-            lastMessage.text = response.response;
-            lastMessage.isStreaming = false;
-          }
-          return newMessages;
-        });
-        
-        if (currentSessionId && !window.location.pathname.includes(currentSessionId)) {
-          navigate(`/chat/${currentSessionId}`, { replace: true });
-        }
-        
-        if (uploadedFiles.length > 0 || response.active_documents) {
-          setActiveDocuments(response.active_documents || []);
+      // Final update to the bot message after stream ends
+      setMessages(prevMessages =>
+        prevMessages.map(msg =>
+          msg.isStreaming && !msg.isUser
+            ? {
+                ...msg,
+                text: apiResponse.error ? `Error: ${apiResponse.error}` : apiResponse.response || fullBotResponseText, // Use accumulated or final
+                isStreaming: false,
+              }
+            : msg
+        )
+      );
+
+      if (apiResponse.session_id && apiResponse.session_id !== currentSessionId) {
+        setCurrentSessionId(apiResponse.session_id); // Update currentSessionId state
+        if (!sessionId || apiResponse.session_id !== sessionId) { // Update URL only if it's actually different
+            navigate(`/chat/${apiResponse.session_id}`, { replace: true });
         }
       }
+      if (apiResponse.active_documents) {
+        setActiveDocuments(apiResponse.active_documents);
+      }
+
     } catch (error) {
-      if (error.name === 'AbortError') {
-        console.log('Request was aborted');
-        return;
+      if (error.name !== 'AbortError') {
+        console.error("Error sending message:", error);
+        setMessages(prevMessages =>
+          prevMessages.map(msg =>
+            msg.isStreaming && !msg.isUser
+              ? {
+                  ...msg,
+                  text: `Sorry, an error occurred: ${error.message || "Failed to get response."}`,
+                  isStreaming: false,
+                }
+              : msg
+          )
+        );
       }
-      console.error("Error:", error);
-      setMessages(prev => {
-        const newMessages = [...prev];
-        const lastMessage = newMessages[newMessages.length - 1];
-        if (lastMessage && !lastMessage.isUser) {
-          lastMessage.text = `Sorry, there was an error: ${error.response?.data?.error || error.message}`;
-          lastMessage.isStreaming = false;
-        }
-        return newMessages;
-      });
     } finally {
       setIsLoading(false);
-      setQuery("");  // Clear the query after submission
-      setUploadedFiles([]);  // Clear uploaded files after sending
+      setUploadedFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       abortControllerRef.current = null;
     }
-  }, [currentSessionId, navigate, selectedTask, uploadedFiles]);
+  }, [currentSessionId, navigate, selectedTask, uploadedFiles, sessionId]); // Added sessionId to deps
 
-  const handleFileChange = useCallback((e) => {
+  const handleFileChange = useCallback((e) => { /* ... your existing logic ... */
     const files = Array.from(e.target.files);
     const previews = files.map((file) => ({
       name: file.name,
@@ -251,71 +202,54 @@ const Searchbar = ({ sessionId, initialMessage, initialResponse, selectedTask: i
     }
   }, [selectedTask]);
 
-  const handleFileUploadClick = useCallback(() => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
+  const handleFileUploadClick = useCallback(() => { /* ... your existing logic ... */
+    if (fileInputRef.current) fileInputRef.current.click();
   }, []);
 
-  const removeFile = useCallback((index) => {
-    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
-  }, []);
+  const removeFile = useCallback((index) => { /* ... your existing logic ... */
+    setUploadedFiles(prev => {
+        const newFiles = prev.filter((_, i) => i !== index);
+        if (newFiles.length === 0 && selectedTask !== "general conversation") {
+            setSelectedTask("general conversation");
+        } else if (newFiles.length === 1 && selectedTask === "comparison") {
+            setSelectedTask("file Q&A");
+        }
+        return newFiles;
+    });
+  }, [selectedTask]);
 
-  const clearConversation = useCallback(async () => {
+  const clearConversation = useCallback(async () => { /* ... your existing logic ... */
     const newSessionId = generateSessionId();
     setCurrentSessionId(newSessionId);
     setMessages([]);
     setActiveDocuments([]);
     setUploadedFiles([]);
-    
-    // Update URL to remove session ID
+    setQuery(""); 
+    setSelectedTask("general conversation");
+    if (fileInputRef.current) fileInputRef.current.value = '';
     navigate('/', { replace: true });
   }, [navigate]);
 
-  // Memoize the SearchInput props
   const searchInputProps = useMemo(() => ({
-    query,
-    setQuery: debouncedSetQuery,
-    handleSubmit,
-    isLoading,
-    uploadedFiles,
-    handleFileUploadClick,
-    fileInputRef,
-    handleFileChange,
-    removeFile,
-    selectedTask,
-    setSelectedTask,
-    setUploadedFiles,
-    clearConversation,
-    messages,
+    query, setQuery,
+    handleSubmit, isLoading, uploadedFiles,
+    handleFileUploadClick, fileInputRef, handleFileChange, removeFile,
+    selectedTask, setSelectedTask, setUploadedFiles,
+    clearConversation, messages,
   }), [
-    query,
-    debouncedSetQuery,
-    handleSubmit,
-    isLoading,
-    uploadedFiles,
-    handleFileUploadClick,
-    fileInputRef,
-    handleFileChange,
-    removeFile,
-    selectedTask,
-    setSelectedTask,
-    setUploadedFiles,
-    clearConversation,
-    messages,
+    query, setQuery,
+    handleSubmit, isLoading, uploadedFiles,
+    handleFileUploadClick, fileInputRef, handleFileChange, removeFile,
+    selectedTask, setSelectedTask, setUploadedFiles,
+    clearConversation, messages,
   ]);
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-[#ffe9e9] via-[#fff4e6] via-35% to-[#e8f0ff]">
-      {/* This div will have the white background for the chat area */}
-      {/* Adjusted height and content alignment to prevent excessive white space */}
-      <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-800 flex flex-col">
-        <ChatDisplay messages={messages} isLoading={isLoading} />
-        <div ref={messagesEndRef} />
+    <div className="flex flex-col h-full bg-base-100">
+      <div className="flex-1 overflow-y-auto">
+        <ChatDisplay messages={messages} isLoading={isLoading && messages.length === 0} />
       </div>
-      <div className="flex justify-center">
-        <SearchInput {...searchInputProps} />
-      </div>
+      <SearchInput {...searchInputProps} />
     </div>
   );
 };

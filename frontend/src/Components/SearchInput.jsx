@@ -1,38 +1,38 @@
+// frontend/src/Components/SearchInput.jsx
 import React, { useCallback, useMemo, useRef } from "react";
 import {
-  FaMicrophone,
-  FaPaperPlane,
-  FaPlus,
-  FaTrash,
-} from "react-icons/fa";
-import {
-  BsFileEarmarkText,
-  BsFileEarmarkPdf,
-  BsFileEarmarkImage,
-} from "react-icons/bs";
-import debounce from 'lodash/debounce';
+  Send,
+  PlusCircle,
+  Trash2,
+  FileText,
+  FileArchive,
+  Image as ImageIcon,
+  XCircle,
+  ChevronDown,
+  // Mic, // Keep if you plan to add voice input
+} from "lucide-react";
+// Removed debounce import as it's not directly used here; Searchbar handles debouncing if needed for setQuery
 
-const FileIcon = React.memo(({ fileType }) => {
-  if (fileType.includes("pdf")) return <BsFileEarmarkPdf className="text-red-500" />;
-  if (fileType.includes("image")) return <BsFileEarmarkImage className="text-blue-500" />;
-  return <BsFileEarmarkText className="text-gray-500" />;
+const FileTypeIcon = React.memo(({ fileType }) => {
+  if (fileType.includes("pdf")) return <FileArchive className="text-red-500 dark:text-red-400" size={20} />;
+  if (fileType.includes("image")) return <ImageIcon className="text-blue-500 dark:text-blue-400" size={20} />;
+  return <FileText className="text-muted-foreground dark:text-dark-muted-foreground" size={20} />;
 });
 
-const FilePreview = React.memo(({ file, index, removeFile }) => (
+const FilePreviewItem = React.memo(({ file, index, removeFile }) => (
   <div
-    className="flex-shrink-0 border rounded-xl px-3 py-2 bg-white shadow-md flex items-center gap-2 min-w-[160px] transition hover:shadow-lg dark:bg-gray-800 dark:border-gray-700"
+    className="flex-shrink-0 border border-border dark:border-dark-border rounded-lg px-3 py-2 bg-card dark:bg-dark-card shadow-sm flex items-center gap-2.5 min-w-[160px] transition-all hover:shadow-md hover:border-primary dark:hover:border-dark-primary"
   >
-    <div className="p-2 bg-gray-100 rounded-full dark:bg-gray-700">
-      <FileIcon fileType={file.type} />
-    </div>
-    <div className="text-sm max-w-[120px] truncate dark:text-white">
+    <FileTypeIcon fileType={file.type} />
+    <div className="text-xs text-card-foreground dark:text-dark-card-foreground max-w-[100px] truncate" title={file.name}>
       {file.name}
     </div>
     <button
       onClick={() => removeFile(index)}
-      className="text-gray-400 hover:text-red-500 transition ml-1"
+      className="text-muted-foreground dark:text-dark-muted-foreground hover:text-destructive dark:hover:text-dark-destructive transition-colors ml-auto p-0.5 rounded-full hover:bg-destructive/10 dark:hover:bg-dark-destructive/10"
+      aria-label="Remove file"
     >
-      <FaTrash size={12} />
+      <XCircle size={18} />
     </button>
   </div>
 ));
@@ -53,33 +53,20 @@ const SearchInput = ({
   clearConversation,
   messages,
 }) => {
-  // Debounced query update with useCallback
-  const debouncedSetQuery = useCallback(
-    debounce((value) => {
-      setQuery(value);
-    }, 100),
-    [setQuery]
-  );
 
   const handleFormSubmit = useCallback(async (e) => {
     e.preventDefault();
     const trimmedQuery = query.trim();
     const effectiveQuery =
-      !trimmedQuery && selectedTask === "summarization"
+      !trimmedQuery && uploadedFiles.length > 0 && selectedTask === "summarization"
         ? "Summarize the uploaded document"
         : trimmedQuery;
-    if (!effectiveQuery) return;
     
-    // Clear the query immediately after submission
-    setQuery("");
-    await handleSubmit(effectiveQuery);
-  }, [query, selectedTask, handleSubmit, setQuery]);
-
-  const handleQueryChange = useCallback((e) => {
-    const value = e.target.value;
-    // Update query state directly
-    setQuery(value);
-  }, [setQuery]);
+    if (!effectiveQuery && uploadedFiles.length === 0) return;
+    
+    setQuery(""); 
+    await handleSubmit(effectiveQuery || (uploadedFiles.length > 0 ? `Tell me about the uploaded file(s).` : ""));
+  }, [query, selectedTask, uploadedFiles, handleSubmit, setQuery]);
 
   const handleTaskChange = useCallback((e) => {
     setSelectedTask(e.target.value);
@@ -87,33 +74,33 @@ const SearchInput = ({
 
   const handleClearFiles = useCallback(() => {
     setUploadedFiles([]);
-  }, [setUploadedFiles]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [setUploadedFiles, fileInputRef]);
 
   const taskOptions = useMemo(() => (
     <>
-      <option value="file Q&A">Ask about document</option>
-      <option value="summarization">Summarize document</option>
+      <option value="file Q&A">Ask about document(s)</option>
+      <option value="summarization">Summarize document(s)</option>
       {uploadedFiles.length > 1 && (
         <option value="comparison">Compare documents</option>
       )}
-      <option value="data analysis and forecast">Analyze data</option>
+      <option value="general conversation">General Conversation</option>
     </>
   ), [uploadedFiles.length]);
 
   const inputPlaceholder = useMemo(() => {
     if (uploadedFiles.length > 0) {
       return selectedTask === "summarization"
-        ? "Add specific instructions for summarization..."
-        : "Ask about the document...";
+        ? "Optional: add specific summarization instructions..."
+        : `Ask about ${uploadedFiles.length > 1 ? 'documents' : 'document'} or type a message...`;
     }
-    return "Ask anything or upload documents...";
-  }, [uploadedFiles.length, selectedTask]);
+    return "Ask anything or drop files...";
+  }, [uploadedFiles, selectedTask]);
 
-  // Memoize the file previews list
   const filePreviews = useMemo(() => (
     uploadedFiles.map((file, index) => (
-      <FilePreview
-        key={`${file.name}-${index}`}
+      <FilePreviewItem
+        key={`${file.name}-${index}-${file.rawFile?.lastModified || index}`}
         file={file}
         index={index}
         removeFile={removeFile}
@@ -121,42 +108,71 @@ const SearchInput = ({
     ))
   ), [uploadedFiles, removeFile]);
 
-  return (
-    <div className="w-4/6 p-4 sticky bottom-0 dark:bg-gray-900 dark:border-gray-700">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {uploadedFiles.length > 0 && (
-          <div className="flex items-center gap-3 mb-3">
-            <select
-              value={selectedTask}
-              onChange={handleTaskChange}
-              className="px-4 py-2 text-sm rounded-lg border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-800 dark:border-gray-600 dark:text-white"
-            >
-              {taskOptions}
-            </select>
-            <button
-              onClick={handleClearFiles}
-              className="text-sm text-red-500 hover:text-red-700 transition flex items-center gap-1"
-            >
-              <FaTrash size={12} /> Clear files
-            </button>
-          </div>
-        )}
+  const dropZoneRef = useRef(null);
+  const handleDragOver = useCallback((e) => { e.preventDefault(); e.stopPropagation(); }, []);
+  const handleDrop = useCallback((e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      const previews = files.map((file) => ({
+        name: file.name,
+        url: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+        type: file.type, rawFile: file,
+      }));
+      setUploadedFiles(prev => [...prev, ...previews]);
+      if (files.length > 0 && selectedTask === "general conversation") {
+        setSelectedTask(files.length === 1 ? "file Q&A" : "comparison");
+      }
+      e.dataTransfer.clearData();
+    }
+  }, [selectedTask, setUploadedFiles]);
 
+  return (
+    <div 
+      ref={dropZoneRef}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      // Removed border-t here for a seamless look
+      className="w-full p-3 sm:p-4 sticky bottom-0 bg-background/80 dark:bg-dark-background/80 backdrop-blur-md shadow-2xl"
+    >
+      <div className="max-w-3xl mx-auto">
         {uploadedFiles.length > 0 && (
-          <div className="flex gap-3 overflow-x-auto pb-3">
-            {filePreviews}
+          <div className="mb-3 px-1">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="relative">
+                <select
+                  value={selectedTask}
+                  onChange={handleTaskChange}
+                  className="appearance-none pl-3 pr-8 py-2 text-xs rounded-md border border-border dark:border-dark-border bg-card dark:bg-dark-card text-card-foreground dark:text-dark-card-foreground shadow-sm focus:ring-2 focus:ring-light-ring dark:focus:ring-dark-ring focus:border-transparent outline-none"
+                >
+                  {taskOptions}
+                </select>
+                <ChevronDown size={16} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground dark:text-dark-muted-foreground pointer-events-none"/>
+              </div>
+              <button
+                onClick={handleClearFiles}
+                className="text-xs text-destructive dark:text-dark-destructive hover:text-red-700 dark:hover:text-rose-400 transition-colors flex items-center gap-1 font-medium"
+                aria-label="Clear all uploaded files"
+              >
+                <Trash2 size={14} /> Clear files
+              </button>
+            </div>
+            <div className="flex gap-2.5 overflow-x-auto pb-2 custom-scrollbar">
+              {filePreviews}
+            </div>
           </div>
         )}
 
         <form onSubmit={handleFormSubmit} className="relative">
-          <div className="flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm overflow-hidden transition-all duration-200 max-w-3xl mx-auto">
+          <div className="flex items-center bg-card dark:bg-dark-card border border-border dark:border-dark-border rounded-full shadow-lg overflow-hidden transition-all duration-200 focus-within:ring-2 focus-within:ring-light-ring dark:focus-within:ring-dark-ring focus-within:border-transparent">
             <button
               type="button"
               onClick={handleFileUploadClick}
-              className="p-3 text-gray-500 hover:text-blue-600 transition"
+              className="p-2.5 sm:p-3 text-muted-foreground dark:text-dark-muted-foreground hover:text-primary dark:hover:text-dark-primary transition-colors focus:outline-none focus:bg-primary/10 dark:focus:bg-dark-primary/10 rounded-full ml-1.5"
               disabled={isLoading}
+              aria-label="Upload file"
             >
-              <FaPlus />
+              <PlusCircle size={22} />
             </button>
             <input
               type="file"
@@ -165,52 +181,47 @@ const SearchInput = ({
               onChange={handleFileChange}
               className="hidden"
               disabled={isLoading}
-              accept=".pdf,.txt,.docx,.jpg,.jpeg,.png"
+              accept=".pdf,.txt,.docx,.jpg,.jpeg,.png,.csv,.xlsx,.md"
             />
 
             <input
               type="text"
               value={query}
-              onChange={handleQueryChange}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder={inputPlaceholder}
-              className="flex-1 px-4 py-3 bg-transparent outline-none dark:text-white"
+              className="flex-1 px-2 sm:px-4 py-3 sm:py-3.5 bg-transparent outline-none text-sm sm:text-base text-foreground dark:text-dark-foreground placeholder:text-muted-foreground dark:placeholder:text-dark-muted-foreground"
               disabled={isLoading}
             />
 
-            <div className="flex items-center pr-2 gap-2">
-              <button
-                type="button"
-                className="p-2 text-gray-500 hover:text-blue-600 transition"
-                disabled={isLoading}
-              >
-                <FaMicrophone />
-              </button>
+            <div className="flex items-center pr-2 sm:pr-2.5">
               <button
                 type="submit"
-                className={`p-2 rounded-full transition ${
-                  isLoading
-                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    : "bg-blue-600 text-white hover:bg-blue-700"
+                className={`p-2 sm:p-2.5 rounded-full transition-all duration-150 ease-in-out focus:outline-none transform active:scale-95 ${
+                  isLoading || (!query.trim() && uploadedFiles.length === 0)
+                    ? "bg-muted dark:bg-dark-muted text-muted-foreground dark:text-dark-muted-foreground cursor-not-allowed"
+                    : "bg-gradient-to-br from-light-primary to-light-accent dark:from-dark-primary dark:to-dark-accent text-white hover:shadow-lg dark:hover:shadow-dark-primary/50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-light-ring dark:focus-visible:ring-dark-ring focus-visible:ring-offset-card dark:focus-visible:ring-offset-dark-card"
                 }`}
-                disabled={isLoading}
+                disabled={isLoading || (!query.trim() && uploadedFiles.length === 0)}
+                aria-label="Send message"
               >
                 {isLoading ? (
-                  <div className="animate-spin h-4 w-4 border-2 border-t-transparent border-white rounded-full"></div>
+                  <div className="animate-spin h-5 w-5 border-2 border-t-transparent border-current rounded-full"></div>
                 ) : (
-                  <FaPaperPlane />
+                  <Send size={18} className="sm:h-5 sm:w-5"/>
                 )}
               </button>
             </div>
           </div>
         </form>
 
-        {messages.length > 0 && (
-          <div className="flex justify-center mt-3">
+        {messages && messages.length > 0 && (
+          <div className="flex justify-center mt-2.5">
             <button
               onClick={clearConversation}
-              className="text-sm text-gray-500 hover:text-gray-700 transition flex items-center gap-1 dark:text-gray-400 dark:hover:text-white"
+              className="text-xs text-muted-foreground dark:text-dark-muted-foreground hover:text-destructive dark:hover:text-dark-destructive transition-colors flex items-center gap-1 font-medium"
+              aria-label="Clear conversation"
             >
-              <FaTrash size={12} /> Clear conversation
+              <Trash2 size={13} /> Clear conversation
             </button>
           </div>
         )}

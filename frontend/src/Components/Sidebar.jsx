@@ -1,6 +1,7 @@
+// rohithsai2004/jcsbot/JCSBOT-c968a16baaf78ba3a848fd197258c78786a45076/frontend/src/Components/Sidebar.jsx
 import { BsChatSquareText } from "react-icons/bs";
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { FaHome, FaFileAlt, FaHistory, FaCog, FaSignOutAlt } from "react-icons/fa";
+import { Home, FileText, History, Settings, LogOut, X } from "lucide-react";
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
   const navigate = useNavigate();
@@ -12,107 +13,88 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     navigate('/login');
   };
 
-  // Function to check if a path is active
-  const isActive = (path) => {
-    return location.pathname === path;
-  };
+  const isActive = (path) => location.pathname === path;
+
+  const navItems = [
+    { path: '/', label: 'Home', icon: Home },
+    { path: '/documents', label: 'Documents', icon: FileText },
+    { path: '/sessions', label: 'Chat History', icon: History },
+  ];
+
+  const bottomNavItems = [
+    { path: '/settings', label: 'Settings', icon: Settings },
+  ];
 
   return (
     <>
-      {/* Sidebar */}
       <div
-        className={`fixed top-0 left-0 h-full bg-white shadow-lg z-40 transition-all duration-300 ease-in-out ${
+        className={`fixed top-0 left-0 h-full bg-base-200 shadow-2xl z-[60] transition-transform duration-300 ease-in-out transform ${
           isOpen ? "translate-x-0 w-64" : "-translate-x-full w-64"
         }`}
       >
         <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="flex items-center justify-center p-6 border-b">
-            <div className="flex items-center">
-              <BsChatSquareText className="h-6 w-6 mr-2 text-indigo-600" />
-              <h1 className="text-xl font-bold text-gray-800">JCS Assistant</h1>
-            </div>
+          <div className="flex items-center justify-between p-4 border-b border-base-300/70 h-[69px]"> {/* Match Navbar height */}
+            <Link to="/" className="flex items-center gap-2 group">
+              <BsChatSquareText className="h-6 w-6 text-primary group-hover:animate-pulse-subtle" />
+              <h1 className="text-xl font-bold text-content group-hover:text-primary transition-colors">JCS Assistant</h1>
+            </Link>
+            <button 
+              onClick={toggleSidebar} 
+              className="text-neutral-400 hover:text-primary hover:bg-primary/10 p-1 rounded-md md:hidden"
+              aria-label="Close sidebar"
+            >
+              <X size={20} />
+            </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 p-4">
-            <ul className="space-y-2">
-              <li>
-                <Link 
-                  to="/" 
-                  className={`flex items-center p-3 rounded-lg ${
-                    isActive('/') 
-                      ? 'bg-indigo-100 text-indigo-700' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <FaHome className="mr-3" />
-                  <span>Home</span>
-                </Link>
-              </li>
-              <li>
-                <Link 
-                  to="/documents" 
-                  className={`flex items-center p-3 rounded-lg ${
-                    isActive('/documents') 
-                      ? 'bg-indigo-100 text-indigo-700' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <FaFileAlt className="mr-3" />
-                  <span>Documents</span>
-                </Link>
-              </li>
-              <li>
-                <Link 
-                  to="/sessions" 
-                  className={`flex items-center p-3 rounded-lg ${
-                    isActive('/sessions') 
-                      ? 'bg-indigo-100 text-indigo-700' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <FaHistory className="mr-3" />
-                  <span>Chat History</span>
-                </Link>
-              </li>
-            </ul>
+          <nav className="flex-1 p-3 space-y-1.5">
+            {navItems.map(item => (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={isOpen && window.innerWidth < 768 ? toggleSidebar : undefined}
+                className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ease-in-out group ${
+                  isActive(item.path)
+                    ? 'bg-primary text-white shadow-md hover:bg-primary-dark'
+                    : 'text-neutral-300 hover:bg-base-300/70 hover:text-primary'
+                }`}
+              >
+                <item.icon size={18} className={`mr-3 ${isActive(item.path) ? 'text-white' : 'text-neutral-400 group-hover:text-primary'}`} />
+                <span>{item.label}</span>
+              </Link>
+            ))}
           </nav>
 
-          {/* Bottom section */}
-          <div className="p-4 border-t">
-            <ul className="space-y-2">
-              <li>
-                <Link 
-                  to="/settings" 
-                  className={`flex items-center p-3 rounded-lg ${
-                    isActive('/settings') 
-                      ? 'bg-indigo-100 text-indigo-700' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <FaCog className="mr-3" />
-                  <span>Settings</span>
-                </Link>
-              </li>
-              <li>
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center p-3 rounded-lg text-red-600 hover:bg-red-50"
-                >
-                  <FaSignOutAlt className="mr-3" />
-                  <span>Logout</span>
-                </button>
-              </li>
-            </ul>
+          <div className="p-3 border-t border-base-300/70 space-y-1.5">
+            {bottomNavItems.map(item => (
+               <Link
+                key={item.path}
+                to={item.path}
+                onClick={isOpen && window.innerWidth < 768 ? toggleSidebar : undefined}
+                className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ease-in-out group ${
+                  isActive(item.path)
+                    ? 'bg-primary text-white shadow-md hover:bg-primary-dark'
+                    : 'text-neutral-300 hover:bg-base-300/70 hover:text-primary'
+                }`}
+              >
+                <item.icon size={18} className={`mr-3 ${isActive(item.path) ? 'text-white' : 'text-neutral-400 group-hover:text-primary'}`} />
+                <span>{item.label}</span>
+              </Link>
+            ))}
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium text-danger hover:bg-danger/20 hover:text-danger/80 transition-colors group"
+            >
+              <LogOut size={18} className="mr-3 text-danger/80 group-hover:text-danger" />
+              <span>Logout</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Overlay to close sidebar on mobile */}
       {isOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 md:hidden"
           onClick={toggleSidebar}
         ></div>
       )}

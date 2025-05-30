@@ -1,3 +1,113 @@
+/* frontend/src/index.css */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-family: 'Inter', theme('fontFamily.sans');
+    @apply scroll-smooth;
+  }
+
+  html.light {
+    --page-bg-image: theme('backgroundImage.page-gradient-light');
+    --page-fg-color: theme('colors.light-foreground');
+    --scrollbar-track-color: theme('colors.light-muted.DEFAULT');
+    --scrollbar-thumb-color: theme('colors.light-primary.DEFAULT');
+    --scrollbar-thumb-hover-color: theme('colors.light-primary.dark');
+    --focus-ring-color: theme('colors.light-ring');
+    --focus-ring-offset-color: theme('colors.light-background'); /* Use light-background for offset */
+
+    background-image: var(--page-bg-image);
+    color: var(--page-fg-color);
+    color-scheme: light;
+  }
+
+  html.dark {
+    --page-bg-image: theme('backgroundImage.page-gradient-dark');
+    --page-fg-color: theme('colors.dark-foreground');
+    --scrollbar-track-color: theme('colors.dark-secondary.DEFAULT');
+    --scrollbar-thumb-color: theme('colors.dark-primary.DEFAULT');
+    --scrollbar-thumb-hover-color: theme('colors.dark-primary.dark');
+    --focus-ring-color: theme('colors.dark-ring');
+    --focus-ring-offset-color: theme('colors.dark-background');
+
+    background-image: var(--page-bg-image);
+    color: var(--page-fg-color);
+    color-scheme: dark;
+  }
+
+  /* Custom scrollbar styling using CSS variables */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { border-radius: 10px; background-color: var(--scrollbar-track-color); }
+  ::-webkit-scrollbar-thumb {
+    border-radius: 10px;
+    @apply border-[2px] border-transparent bg-clip-content; /* Ensure border is transparent */
+    background-color: var(--scrollbar-thumb-color);
+  }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover-color); }
+
+  /* General focus visible style for accessibility using CSS variables */
+  *:focus-visible {
+    outline: none;
+    @apply ring-2 ring-offset-2;
+    ring-color: var(--focus-ring-color);
+    ring-offset-color: var(--focus-ring-offset-color); /* This will be the page background */
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2.5 rounded-lg font-semibold text-sm tracking-wide
+           transition-all duration-200 ease-in-out 
+           focus:outline-none focus-visible:ring-2 
+           focus-visible:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95;
+  }
+  .btn-primary {
+    @apply btn bg-light-primary text-light-primary-foreground hover:bg-light-primary-dark focus-visible:ring-light-ring focus-visible:ring-offset-light-background
+           dark:bg-dark-primary dark:text-dark-primary-foreground dark:hover:bg-dark-primary-dark dark:focus-visible:ring-dark-ring dark:focus-visible:ring-offset-dark-background
+           shadow-lg hover:shadow-light-primary/30 dark:hover:shadow-dark-primary/30;
+  }
+  .btn-secondary {
+    @apply btn bg-light-secondary text-light-secondary-foreground hover:bg-slate-300 dark:hover:bg-dark-secondary/80 focus-visible:ring-light-secondary focus-visible:ring-offset-light-background
+           dark:bg-dark-secondary dark:text-dark-secondary-foreground dark:focus-visible:ring-dark-secondary dark:focus-visible:ring-offset-dark-background
+           shadow-md;
+  }
+  .btn-outline {
+    @apply btn border text-light-primary hover:bg-light-primary/10 focus-visible:ring-light-ring focus-visible:ring-offset-light-background
+           border-light-border 
+           dark:border-dark-border dark:text-dark-primary dark:hover:bg-dark-primary/10 dark:focus-visible:ring-dark-ring dark:focus-visible:ring-offset-dark-background;
+  }
+  .btn-ghost {
+    @apply btn text-light-foreground hover:bg-light-muted focus-visible:ring-light-ring focus-visible:ring-offset-light-background
+           dark:text-dark-foreground dark:hover:bg-dark-muted dark:focus-visible:ring-dark-ring dark:focus-visible:ring-offset-dark-background;
+  }
+  .btn-destructive {
+    @apply btn bg-light-destructive text-light-destructive-foreground hover:bg-red-600 focus-visible:ring-light-destructive focus-visible:ring-offset-light-background
+           dark:bg-dark-destructive dark:text-dark-destructive-foreground dark:hover:bg-rose-600 dark:focus-visible:ring-dark-destructive dark:focus-visible:ring-offset-dark-background;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2.5 rounded-lg border 
+           bg-light-input-bg text-light-foreground border-light-input-border placeholder:text-light-muted-foreground 
+           focus:ring-2 focus:border-transparent outline-none 
+           transition-all duration-150 ease-in-out shadow-sm
+           focus:ring-light-ring focus-visible:ring-offset-light-background
+           dark:bg-dark-input-bg dark:text-dark-foreground dark:border-dark-input-border 
+           dark:placeholder:text-dark-muted-foreground dark:focus:ring-dark-ring dark:focus-visible:ring-offset-dark-background;
+  }
+  .card {
+    @apply bg-light-card text-light-card-foreground rounded-xl shadow-card-light border 
+           border-light-border 
+           dark:bg-dark-card dark:text-dark-card-foreground dark:border-dark-border dark:shadow-card-dark;
+  }
+}
+
+.dark .prose {
+  @apply prose-invert;
+}

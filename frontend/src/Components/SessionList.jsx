@@ -1,17 +1,18 @@
+// rohithsai2004/jcsbot/JCSBOT-c968a16baaf78ba3a848fd197258c78786a45076/frontend/src/Components/SessionList.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns'; // Import more specific functions
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
-import { FaPlus, FaTrash, FaFileAlt } from 'react-icons/fa';
-import apiClient from '../api/apiClient'; // Import apiClient
+import { PlusCircle, Trash2, MessageSquare, FileText as FileIconLucide, Loader2 } from 'lucide-react'; // Icons
+import apiClient from '../api/apiClient';
 
 const SessionList = () => {
     const navigate = useNavigate();
     const [sessions, setSessions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Manage sidebar state locally or lift up
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [username, setUsername] = useState('');
 
@@ -31,12 +32,12 @@ const SessionList = () => {
     const loadSessions = async () => {
         try {
             setLoading(true);
-            // Using apiClient instead of direct axios
             const response = await apiClient.get('/sessions');
             setSessions(response.data.sessions || []);
+            setError('');
         } catch (err) {
             console.error("Error loading sessions:", err);
-            setError('Failed to load chat sessions');
+            setError(err.response?.data?.detail || 'Failed to load chat sessions. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -47,131 +48,145 @@ const SessionList = () => {
     };
 
     const deleteSession = async (sessionId, e) => {
-        e.stopPropagation(); // Prevent triggering the parent onClick
-        if (!window.confirm('Are you sure you want to delete this conversation?')) {
+        e.stopPropagation(); 
+        if (!window.confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
             return;
         }
-        
         try {
-            // Using apiClient instead of direct axios
             await apiClient.delete(`/session/${sessionId}`);
-            // Remove from UI
-            setSessions(sessions.filter(s => s.session_id !== sessionId));
+            setSessions(prevSessions => prevSessions.filter(s => s.session_id !== sessionId));
         } catch (err) {
             console.error("Error deleting session:", err);
-            setError('Failed to delete session');
+            setError('Failed to delete session. Please try again.');
         }
     };
 
-    const formatDate = (dateString) => {
+    const formatDateHeading = (dateString) => {
         const date = new Date(dateString);
-        const today = new Date();
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        
-        if (date.toDateString() === today.toDateString()) {
-            return 'Today';
-        } else if (date.toDateString() === yesterday.toDateString()) {
-            return 'Yesterday';
-        } else {
-            return format(date, 'MMM d, yyyy');
-        }
+        if (isToday(date)) return 'Today';
+        if (isYesterday(date)) return 'Yesterday';
+        return format(date, 'MMMM d, yyyy'); // More descriptive
     };
 
-    const handleLogout = () => {
+    const handleLogout = () => { // Ensure this function is correctly passed or defined if Navbar handles it
         localStorage.removeItem('token');
         localStorage.removeItem('username');
+        setIsLoggedIn(false);
+        setUsername('');
         navigate('/login');
     };
 
-    // Group sessions by date
     const groupedSessions = sessions.reduce((groups, session) => {
-        const dateKey = formatDate(session.last_activity);
-        if (!groups[dateKey]) {
-            groups[dateKey] = [];
-        }
+        const dateKey = formatDateHeading(session.last_activity);
+        if (!groups[dateKey]) groups[dateKey] = [];
         groups[dateKey].push(session);
         return groups;
     }, {});
 
-    if (loading) {
-        return <div className="text-center text-gray-500 dark:text-gray-400">Loading sessions...</div>;
-    }
+    const sortedGroupKeys = Object.keys(groupedSessions).sort((a, b) => {
+      // Custom sort logic for "Today", "Yesterday", then dates
+      if (a === 'Today') return -1;
+      if (b === 'Today') return 1;
+      if (a === 'Yesterday') return -1;
+      if (b === 'Yesterday') return 1;
+      return new Date(b) - new Date(a); // Sort dates descending
+    });
 
-    if (error) {
-        return <div className="text-center text-red-500 dark:text-red-400">Error loading sessions: {error}</div>;
-    }
-
-    if (sessions.length === 0) {
-        return <div className="text-center text-gray-500 dark:text-gray-400">No recent sessions found. Start a new conversation!</div>;
-    }
 
     return (
-        <div className="relative h-screen w-full overflow-hidden bg-gradient-to-br from-[#ffe9e9] via-[#fff4e6] via-35% to-[#e8f0ff]">
-            {/* Sidebar */}
+        <div className="flex h-screen bg-neutral-100">
             <Sidebar
                 isOpen={isSidebarOpen}
                 toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
             />
-
-            {/* Main content */}
-            <div
-                className={`h-full transition-all duration-300 ease-in-out ${
-                    isSidebarOpen ? "ml-64" : "ml-0"
-                }`}
-            >
-                {/* Navbar */}
+            <div className={`flex-1 flex flex-col transition-all duration-300 ease-in-out ${isSidebarOpen ? "md:ml-64" : "ml-0"}`}>
                 <Navbar
                     isLoggedIn={isLoggedIn}
                     username={username}
                     handleLogout={handleLogout}
                     toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
                 />
-
-                {/* Sessions List */}
-                <div className="max-w-4xl mx-auto p-6 overflow-y-auto h-[calc(100%-80px)]">
-                    <h1 className="text-2xl font-bold mb-6">Your Conversations</h1>
-                    
-                    {sessions.length === 0 ? (
-                        <div className="text-center p-8 bg-gray-50 rounded-lg">
-                            <p>No conversations in the last 15 days</p>
+                <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+                    <div className="max-w-4xl mx-auto">
+                        <div className="flex justify-between items-center mb-6">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800">Your Conversations</h1>
+                            <button
+                                onClick={() => navigate('/chat')} // Navigate to new chat
+                                className="bg-primary text-white font-medium px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 flex items-center gap-2 text-sm sm:text-base"
+                            >
+                                <PlusCircle size={18} /> New Chat
+                            </button>
                         </div>
-                    ) : (
-                        Object.entries(groupedSessions).map(([date, dateSessions]) => (
-                            <div key={date} className="mb-6">
-                                <h2 className="text-sm font-medium text-gray-500 mb-2">{date}</h2>
-                                {dateSessions.map(session => (
-                                    <div 
-                                        key={session.session_id}
-                                        onClick={() => openSession(session.session_id)}
-                                        className="p-4 bg-white rounded-lg shadow hover:shadow-md cursor-pointer transition-shadow mb-2"
-                                    >
-                                        <p className="font-medium truncate">{session.preview}</p>
-                                        <div className="flex justify-between mt-2 text-sm text-gray-500">
-                                            <span>{format(new Date(session.last_activity), 'h:mm a')}</span>
-                                            {session.document_count > 0 && (
-                                                <span>{session.document_count} document{session.document_count !== 1 ? 's' : ''}</span>
-                                            )}
+
+                        {loading && (
+                            <div className="flex justify-center items-center py-10">
+                                <Loader2 size={32} className="animate-spin text-primary" />
+                                <p className="ml-2 text-neutral-600">Loading sessions...</p>
+                            </div>
+                        )}
+
+                        {error && !loading && (
+                             <div className="bg-danger/10 border border-danger/30 text-danger px-4 py-3 rounded-md text-sm text-center">
+                                {error}
+                            </div>
+                        )}
+                        
+                        {!loading && !error && sessions.length === 0 && (
+                            <div className="text-center py-12 bg-white rounded-xl shadow-lg border border-neutral-200">
+                                <MessageSquare size={48} className="mx-auto text-neutral-400 mb-4" />
+                                <h3 className="text-xl font-semibold text-neutral-700">No Conversations Yet</h3>
+                                <p className="text-neutral-500 mt-1 mb-6">Start a new chat to see your conversations here.</p>
+                                <button
+                                    onClick={() => navigate('/chat')}
+                                    className="bg-primary text-white font-medium px-5 py-2.5 rounded-lg hover:bg-primary-dark transition-colors shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary-dark focus:ring-offset-2 flex items-center gap-2 mx-auto"
+                                >
+                                    <PlusCircle size={20} /> Start New Chat
+                                </button>
+                            </div>
+                        )}
+
+                        {!loading && !error && sessions.length > 0 && (
+                            <div className="space-y-6">
+                                {sortedGroupKeys.map(dateKey => (
+                                    <section key={dateKey}>
+                                        <h2 className="text-sm font-semibold text-neutral-500 mb-2 uppercase tracking-wider">{dateKey}</h2>
+                                        <div className="space-y-3">
+                                            {groupedSessions[dateKey].map(session => (
+                                                <div
+                                                    key={session.session_id}
+                                                    onClick={() => openSession(session.session_id)}
+                                                    className="bg-white p-4 rounded-lg shadow-subtle border border-neutral-200 hover:shadow-md hover:border-primary/50 cursor-pointer transition-all group"
+                                                >
+                                                    <div className="flex justify-between items-start">
+                                                        <p className="font-medium text-neutral-800 group-hover:text-primary transition-colors truncate mr-4 flex-1">
+                                                            {session.preview || "Untitled Conversation"}
+                                                        </p>
+                                                        <button
+                                                            onClick={(e) => deleteSession(session.session_id, e)}
+                                                            className="text-neutral-400 hover:text-danger p-1 rounded-full hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
+                                                            aria-label="Delete session"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex items-center justify-between mt-2 text-xs text-neutral-500">
+                                                        <span>{format(new Date(session.last_activity), 'p')}</span> {/* p for time */}
+                                                        {session.document_count > 0 && (
+                                                            <span className="flex items-center gap-1">
+                                                                <FileIconLucide size={14} />
+                                                                {session.document_count} doc{session.document_count !== 1 ? 's' : ''}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
-                                        <button 
-                                            onClick={(e) => deleteSession(session.session_id, e)}
-                                            className="text-red-500 hover:text-red-700 mt-2"
-                                        >
-                                            <FaTrash /> Delete
-                                        </button>
-                                    </div>
+                                    </section>
                                 ))}
                             </div>
-                        ))
-                    )}
-                    
-                    <button 
-                        onClick={() => navigate('/chat')}
-                        className="mt-6 w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                    >
-                        New Conversation
-                    </button>
-                </div>
+                        )}
+                    </div>
+                </main>
             </div>
         </div>
     );
