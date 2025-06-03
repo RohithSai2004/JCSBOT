@@ -76,24 +76,21 @@ export default {
       backgroundImage: {
         'page-gradient-light': 'linear-gradient(180deg, #e6eff9 0%, #f3f6f9 50%, #e6eff9 100%)',
         'page-gradient-dark': 'linear-gradient(180deg, #0a0f17 0%, #111827 50%, #0a0f17 100%)',
-        'text-gradient-light': 'linear-gradient(135deg, theme(colors.light-primary.DEFAULT) 0%, theme(colors.light-accent.DEFAULT) 100%)',
-        'text-gradient-dark': 'linear-gradient(135deg, theme(colors.dark-primary.light) 0%, theme(colors.dark-accent.DEFAULT) 100%)',
+        // CORRECTED: Replaced theme() with static hex values
+        'text-gradient-light': 'linear-gradient(135deg, #0ea5e9 0%, #ef4444 100%)', // light-primary.DEFAULT to light-accent.DEFAULT
+        'text-gradient-dark': 'linear-gradient(135deg, #60a5fa 0%, #f472b6 100%)',   // dark-primary.light to dark-accent.DEFAULT
       },
       animation: { /* Your existing animations */ },
       keyframes: { /* Your existing keyframes */ },
       boxShadow: {
-        // Corrected: Replace theme() with static values or ensure it's used in a function context
-        // For focus rings, it's generally better to use Tailwind's ring utilities directly in components
-        // e.g., focus:ring-2 focus:ring-light-ring or focus:ring-dark-ring
-        'interactive-light': '0 0 0 3px rgba(14, 165, 233, 0.3)', // rgba for #0ea5e9 with 0.3 opacity
-        'interactive-dark': '0 0 0 3px rgba(59, 130, 246, 0.3)',   // rgba for #3b82f6 with 0.3 opacity
-        
+        'interactive-light': '0 0 0 3px rgba(14, 165, 233, 0.3)',
+        'interactive-dark': '0 0 0 3px rgba(59, 130, 246, 0.3)',
         'card-light': '0 5px 15px rgba(0,0,0,0.04), 0 2px 5px rgba(0,0,0,0.02)',
         'card-dark': '0 5px 15px rgba(0,0,0,0.15), 0 2px 5px rgba(0,0,0,0.1), 0 0 0 1px rgba(255,255,255,0.03)',
         'soft-xl': '0 10px 20px -5px rgba(26, 32, 44, 0.1), 0 4px 6px -4px rgba(26, 32, 44, 0.06)',
         'dark-soft-xl': '0 10px 15px -3px rgba(0,0,0,0.2), 0 4px 6px -4px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.05)',
       },
-      typography: (theme) => ({
+      typography: (theme) => ({ // theme() is correctly available here
         DEFAULT: { // For light mode: .prose
           css: {
             '--tw-prose-body': theme('colors.light-foreground'),
@@ -125,24 +122,24 @@ export default {
         invert: { // For dark mode: .prose-invert
           css: {
             '--tw-prose-body': theme('colors.dark-foreground'),
-            '--tw-prose-headings': theme('colors.neutral.100'),
+            '--tw-prose-headings': theme('colors.neutral[100]'),
             '--tw-prose-links': theme('colors.dark-primary.light'),
-            '--tw-prose-bold': theme('colors.neutral.100'),
+            '--tw-prose-bold': theme('colors.neutral[100]'),
             '--tw-prose-counters': theme('colors.dark-primary.DEFAULT'),
             '--tw-prose-bullets': theme('colors.dark-primary.DEFAULT'),
             '--tw-prose-hr': theme('colors.dark-border'),
-            '--tw-prose-quotes': theme('colors.neutral.300'),
+            '--tw-prose-quotes': theme('colors.neutral[300]'),
             '--tw-prose-quote-borders': theme('colors.dark-primary.dark'),
-            '--tw-prose-captions': theme('colors.neutral.400'),
+            '--tw-prose-captions': theme('colors.neutral[400]'),
             '--tw-prose-code': theme('colors.dark-accent.DEFAULT'),
-            '--tw-prose-pre-code': theme('colors.neutral.200'),
-            '--tw-prose-pre-bg': theme('colors.neutral.800'),
-            '--tw-prose-th-borders': theme('colors.neutral.600'),
-            '--tw-prose-td-borders': theme('colors.neutral.700'),
+            '--tw-prose-pre-code': theme('colors.neutral[200]'),
+            '--tw-prose-pre-bg': theme('colors.neutral[800]'),
+            '--tw-prose-th-borders': theme('colors.neutral[600]'),
+            '--tw-prose-td-borders': theme('colors.neutral[700]'),
             table: { fontSize: theme('fontSize.sm'), marginTop: theme('spacing.6'), marginBottom: theme('spacing.6'), width: '100%' },
-            thead: { borderBottomWidth: '1px', borderBottomColor: theme('colors.neutral.600')},
-            'thead th': { paddingTop: theme('spacing.2'), paddingBottom: theme('spacing.2'), paddingLeft: theme('spacing.3'), paddingRight: theme('spacing.3'), fontWeight: theme('fontWeight.semibold'), color: theme('colors.neutral.100'), textAlign: 'left'},
-            'tbody tr': { borderBottomWidth: '1px', borderBottomColor: theme('colors.neutral.700')},
+            thead: { borderBottomWidth: '1px', borderBottomColor: theme('colors.neutral[600]')},
+            'thead th': { paddingTop: theme('spacing.2'), paddingBottom: theme('spacing.2'), paddingLeft: theme('spacing.3'), paddingRight: theme('spacing.3'), fontWeight: theme('fontWeight.semibold'), color: theme('colors.neutral[100]'), textAlign: 'left'},
+            'tbody tr': { borderBottomWidth: '1px', borderBottomColor: theme('colors.neutral[700]')},
             'tbody tr:last-child': { borderBottomWidth: '0px' },
             'tbody td': { paddingTop: theme('spacing.2'), paddingBottom: theme('spacing.2'), paddingLeft: theme('spacing.3'), paddingRight: theme('spacing.3'), verticalAlign: 'baseline'},
             ul: { paddingLeft: theme('spacing.5')}, ol: { paddingLeft: theme('spacing.5')}, li: { marginTop: theme('spacing.1'), marginBottom: theme('spacing.1')},
