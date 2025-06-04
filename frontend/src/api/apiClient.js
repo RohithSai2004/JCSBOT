@@ -130,6 +130,28 @@ export const api = {
     }
   },
 
+  // Add this new method
+  getSessions: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/sessions`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Sessions Error:", error.message);
+      throw error;
+    }
+  },
+
   // Document management endpoints
   listDocuments: async () => {
     try {

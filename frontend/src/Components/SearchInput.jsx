@@ -9,9 +9,7 @@ import {
   Image as ImageIcon,
   XCircle,
   ChevronDown,
-  // Mic, // Keep if you plan to add voice input
 } from "lucide-react";
-// Removed debounce import as it's not directly used here; Searchbar handles debouncing if needed for setQuery
 
 const FileTypeIcon = React.memo(({ fileType }) => {
   if (fileType.includes("pdf")) return <FileArchive className="text-red-500 dark:text-red-400" size={20} />;
@@ -125,14 +123,13 @@ const SearchInput = ({
       }
       e.dataTransfer.clearData();
     }
-  }, [selectedTask, setUploadedFiles]);
+  }, [selectedTask, setSelectedTask, setUploadedFiles]);
 
   return (
     <div 
       ref={dropZoneRef}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      // Removed border-t here for a seamless look
       className="w-full p-3 sm:p-4 sticky bottom-0 bg-background/80 dark:bg-dark-background/80 backdrop-blur-md shadow-2xl"
     >
       <div className="max-w-3xl mx-auto">
@@ -164,16 +161,25 @@ const SearchInput = ({
         )}
 
         <form onSubmit={handleFormSubmit} className="relative">
+          {/* MAIN INPUT BAR CONTAINER: 
+            *** MOST IMPORTANT CHECK FOR VERTICAL LINES ***
+            Ensure this 'div' element does NOT have any `divide-x` or `divide-[color]` Tailwind classes in your project.
+            Example of problematic classes to remove: `divide-x divide-gray-300 dark:divide-gray-700`
+            The classes below are for the overall appearance of the input bar.
+          */}
           <div className="flex items-center bg-card dark:bg-dark-card border border-border dark:border-dark-border rounded-full shadow-lg overflow-hidden transition-all duration-200 focus-within:ring-2 focus-within:ring-light-ring dark:focus-within:ring-dark-ring focus-within:border-transparent">
+            
+            {/* UPLOAD BUTTON (+) */}
             <button
               type="button"
               onClick={handleFileUploadClick}
-              className="p-2.5 sm:p-3 text-muted-foreground dark:text-dark-muted-foreground hover:text-primary dark:hover:text-dark-primary transition-colors focus:outline-none focus:bg-primary/10 dark:focus:bg-dark-primary/10 rounded-full ml-1.5"
+              className="p-2.5 sm:p-3 text-muted-foreground dark:text-dark-muted-foreground hover:text-primary dark:hover:text-dark-primary transition-colors focus:outline-none focus:bg-primary/10 dark:focus:bg-dark-primary/10 rounded-full ml-1.5 border-0" // border-0 to remove any default/inherited borders
               disabled={isLoading}
               aria-label="Upload file"
             >
               <PlusCircle size={22} />
             </button>
+            
             <input
               type="file"
               multiple
@@ -184,19 +190,21 @@ const SearchInput = ({
               accept=".pdf,.txt,.docx,.jpg,.jpeg,.png,.csv,.xlsx,.md"
             />
 
+            {/* TEXT INPUT FIELD */}
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={inputPlaceholder}
-              className="flex-1 px-2 sm:px-4 py-3 sm:py-3.5 bg-transparent outline-none text-sm sm:text-base text-foreground dark:text-dark-foreground placeholder:text-muted-foreground dark:placeholder:text-dark-muted-foreground"
+              className="flex-1 px-2 sm:px-4 py-3 sm:py-3.5 bg-transparent outline-none text-sm sm:text-base text-foreground dark:text-dark-foreground placeholder:text-muted-foreground dark:placeholder:text-dark-muted-foreground border-0" // border-0 to remove any default/inherited borders
               disabled={isLoading}
             />
 
-            <div className="flex items-center pr-2 sm:pr-2.5">
+            {/* SEND BUTTON AREA */}
+            <div className="flex items-center pr-2 sm:pr-2.5 border-0"> {/* border-0 on this wrapper too, just in case */}
               <button
                 type="submit"
-                className={`p-2 sm:p-2.5 rounded-full transition-all duration-150 ease-in-out focus:outline-none transform active:scale-95 ${
+                className={`p-2 sm:p-2.5 rounded-full transition-all duration-150 ease-in-out focus:outline-none transform active:scale-95 border-0 ${ // border-0 on the button
                   isLoading || (!query.trim() && uploadedFiles.length === 0)
                     ? "bg-muted dark:bg-dark-muted text-muted-foreground dark:text-dark-muted-foreground cursor-not-allowed"
                     : "bg-gradient-to-br from-light-primary to-light-accent dark:from-dark-primary dark:to-dark-accent text-white hover:shadow-lg dark:hover:shadow-dark-primary/50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-light-ring dark:focus-visible:ring-dark-ring focus-visible:ring-offset-card dark:focus-visible:ring-offset-dark-card"

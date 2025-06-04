@@ -5,7 +5,7 @@ import { User, Bot, FileArchive, ImageIcon, FileText as FileTextIcon, Zap, Clipb
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import "highlight.js/styles/atom-one-dark.css"; // Keep a good dark theme for code blocks
+import "highlight.js/styles/atom-one-dark.css"; // Or your preferred highlight.js theme
 
 const FileIcon = React.memo(({ fileType }) => {
   if (fileType.includes("pdf")) return <FileArchive className="text-red-500 dark:text-red-400" size={18} />;
@@ -23,7 +23,6 @@ const FileAttachment = React.memo(({ file }) => (
 ));
 
 const PreWithCopyButton = ({ node, children, className: inheritedClassName, ...props }) => {
-  // ... (PreWithCopyButton code from previous response, ID: chat_display_enhanced_v2 - it's good)
   const [copied, setCopied] = useState(false);
   const preRef = useRef(null);
 
@@ -42,7 +41,7 @@ const PreWithCopyButton = ({ node, children, className: inheritedClassName, ...p
   const textToCopy = preRef.current ? preRef.current.textContent : extractTextContent(children);
 
   const handleCopy = async () => {
-    if (!textToCopy.trim()) return;
+    if (!textToCopy?.trim()) return;
     try {
       await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
@@ -68,11 +67,11 @@ const PreWithCopyButton = ({ node, children, className: inheritedClassName, ...p
   };
   
   return (
-    <div className="relative group my-3"> {/* prose-pre styles are handled by the main prose wrapper */}
+    <div className="relative group my-3">
       <pre 
         ref={preRef} 
         {...props} 
-        className={`${inheritedClassName} p-4 rounded-lg overflow-x-auto bg-slate-100 dark:bg-neutral-800 text-sm custom-scrollbar`}
+        className={`${inheritedClassName || ''} p-4 rounded-lg overflow-x-auto bg-slate-100 dark:bg-neutral-800 text-sm custom-scrollbar`}
       >
         {children}
       </pre>
@@ -89,15 +88,42 @@ const PreWithCopyButton = ({ node, children, className: inheritedClassName, ...p
 
 
 const ChatDisplay = ({ messages, isLoading, onPromptSuggestionClick }) => {
-  const messagesEndRef = useRef(null);
+  const scrollableContainerRef = useRef(null);
+  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
+  const [isAtBottomBeforeUpdate, setIsAtBottomBeforeUpdate] = useState(true);
 
+  // Effect to handle smart scrolling
   useEffect(() => {
-    if (messages.length) {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }
-  }, [messages]);
+    const container = scrollableContainerRef.current;
+    if (!container) return;
 
-  const renderMessageContent = (msg) => {
+    // Only auto-scroll if the user was at the bottom before the messages updated
+    if (isAtBottomBeforeUpdate && !isUserScrolledUp) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [messages, isAtBottomBeforeUpdate, isUserScrolledUp]);
+
+  // Effect to check if user is scrolled to bottom before an update
+  // This runs *before* the messages array potentially changes length or content.
+  useEffect(() => {
+    const container = scrollableContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const threshold = 50; // Pixels from bottom to consider "at bottom"
+      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+      setIsUserScrolledUp(!atBottom); // User is scrolled up if not at bottom
+    };
+    
+    // Check scroll position before messages update
+    const threshold = 10; 
+    setIsAtBottomBeforeUpdate(container.scrollHeight - container.scrollTop - container.clientHeight < threshold);
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [messages]); // Re-check on messages dependency to capture state before next potential scroll
+
+  const renderMessageContent = (msg, isLastMessage) => {
     const isErrorMessage = typeof msg.text === 'string' && msg.text.toLowerCase().startsWith("error:");
     return (
     <>
@@ -106,7 +132,7 @@ const ChatDisplay = ({ messages, isLoading, onPromptSuggestionClick }) => {
                    ${isErrorMessage ? 'prose-p:text-light-destructive dark:prose-p:text-dark-destructive' : ''}`}
       >
         <ReactMarkdown
-          children={msg.text}
+          children={msg.text || ""} // Ensure children is always a string
           remarkPlugins={[remarkGfm]}
           rehypePlugins={[rehypeHighlight]}
           components={{
@@ -116,9 +142,17 @@ const ChatDisplay = ({ messages, isLoading, onPromptSuggestionClick }) => {
         />
       </div>
       {msg.files && msg.files.length > 0 && ( <div className="mt-3 space-y-2"> {msg.files.map((file, fileIndex) => ( <FileAttachment key={fileIndex} file={file} /> ))} </div> )}
-      {msg.isStreaming && ( <div className="flex space-x-1 mt-2 items-center"> <motion.div className="w-1.5 h-1.5 bg-light-muted-foreground dark:bg-dark-muted-foreground rounded-full" animate={{ y: [0, -3, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0 }} /> <motion.div className="w-1.5 h-1.5 bg-light-muted-foreground dark:bg-dark-muted-foreground rounded-full" animate={{ y: [0, -3, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.1 }} /> <motion.div className="w-1.5 h-1.5 bg-light-muted-foreground dark:bg-dark-muted-foreground rounded-full" animate={{ y: [0, -3, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }} /> </div> )}
+      
+      {/* Typing indicator: only for the last bot message if it's streaming */}
+      {isLastMessage && !msg.isUser && msg.isStreaming && ( 
+        <div className="flex space-x-1 mt-2 items-center"> 
+          <motion.div className="w-1.5 h-1.5 bg-light-muted-foreground dark:bg-dark-muted-foreground rounded-full" animate={{ y: [0, -3, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0 }} /> 
+          <motion.div className="w-1.5 h-1.5 bg-light-muted-foreground dark:bg-dark-muted-foreground rounded-full" animate={{ y: [0, -3, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.1 }} /> 
+          <motion.div className="w-1.5 h-1.5 bg-light-muted-foreground dark:bg-dark-muted-foreground rounded-full" animate={{ y: [0, -3, 0] }} transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }} /> 
+        </div> 
+      )}
       <div className={`text-[11px] mt-2 ${msg.isUser ? "text-light-primary-foreground/70 dark:text-dark-primary-foreground/70" : "text-light-muted-foreground dark:text-dark-muted-foreground"} text-right`}>
-        {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
       </div>
     </>
    );
@@ -132,8 +166,8 @@ const ChatDisplay = ({ messages, isLoading, onPromptSuggestionClick }) => {
   ];
 
   return (
-    <div className="flex-1 p-4 sm:p-6 custom-scrollbar bg-transparent">
-      <div className="max-w-3xl mx-auto space-y-5">
+    <div ref={scrollableContainerRef} className="flex-1 p-4 sm:p-6 custom-scrollbar bg-transparent overflow-y-auto">
+      <div className="max-w-3xl mx-auto space-y-5 pb-4"> {/* Added pb-4 for some bottom spacing */}
         {messages.length === 0 && !isLoading ? (
           <div className="text-center pt-10 sm:pt-12">
             <motion.div
@@ -146,7 +180,7 @@ const ChatDisplay = ({ messages, isLoading, onPromptSuggestionClick }) => {
                 <motion.h1
                     className="text-5xl sm:text-6xl font-extrabold text-transparent bg-clip-text 
                                bg-text-gradient-light dark:bg-text-gradient-dark 
-                               block" // Removed animate-pulse-subtle for direct visibility
+                               block"
                     initial={{ opacity: 0}} animate={{opacity: 1}} transition={{delay: 0.3, duration: 0.5}}
                 >
                   Hello, I'm JA<span className="lowercase">i</span>
@@ -187,8 +221,8 @@ const ChatDisplay = ({ messages, isLoading, onPromptSuggestionClick }) => {
           <AnimatePresence initial={false}>
             {messages.map((msg, index) => (
               <motion.div
-                key={msg.id || `msg-${index}`}
-                layout
+                key={msg.id || `msg-${index}-${msg.timestamp}`} // More unique key
+                layout // Enables smooth animation when items are added/removed or reordered
                 initial={{ opacity: 0, y: 20, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9, transition: {duration: 0.2} }}
@@ -207,7 +241,7 @@ const ChatDisplay = ({ messages, isLoading, onPromptSuggestionClick }) => {
                       : "bg-card dark:bg-dark-card text-card-foreground dark:text-dark-card-foreground rounded-bl-lg border border-border dark:border-dark-border"
                   }`}
                 >
-                  {renderMessageContent(msg)}
+                  {renderMessageContent(msg, index === messages.length - 1)}
                 </div>
                 {msg.isUser && (
                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-light-accent dark:bg-dark-accent text-white flex items-center justify-center mt-0.5 shadow-md">
@@ -218,13 +252,15 @@ const ChatDisplay = ({ messages, isLoading, onPromptSuggestionClick }) => {
             ))}
           </AnimatePresence>
         )}
+        {/* Loading indicator when messages are empty but app is loading (e.g., fetching session) */}
         {isLoading && messages.length === 0 && (
              <div className="flex justify-center items-center py-10">
                 <motion.div className="w-8 h-8 border-4 border-light-primary dark:border-dark-primary border-t-transparent rounded-full animate-spin" />
                 <p className="ml-3 text-muted-foreground dark:text-dark-muted-foreground">Loading chat...</p>
             </div>
         )}
-        <div ref={messagesEndRef} />
+        {/* This div is no longer needed as scrollableContainerRef points to the main container */}
+        {/* <div ref={messagesEndRef} /> */} 
       </div>
     </div>
   );

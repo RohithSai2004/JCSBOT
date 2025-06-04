@@ -27,7 +27,22 @@ from app.db.mongodb import (
     DocumentEmbedding, documents_collection, chat_history_collection,
     embeddings_collection
 )
+from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Dict, Any, Optional # Ensure all are imported
+from datetime import datetime, timedelta
+import traceback
+import logging
 
+# Correctly import User Pydantic model and get_current_user
+# Adjust path if your User model or get_current_user are elsewhere
+from app.db.mongodb import User as PydanticUser 
+ # Assuming get_current_user is defined here or imported appropriately
+
+from app.services.chat_session import chat_session_manager
+# from app.models.schemas import WelcomeResponse # Keep if you have a / route
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
 # JWT imports
 import jwt
 import secrets
@@ -564,15 +579,7 @@ async def get_session(session_id: str, current_user: User = Depends(get_current_
         print(f"Error getting session: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/session/{session_id}")
-async def end_session(session_id: str, current_user: User = Depends(get_current_user)):
-    """End a chat session."""
-    try:
-        await chat_session_manager.end_session(session_id)
-        return {"message": "Session ended successfully"}
-    except Exception as e:
-        print(f"Error ending session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/documents", response_model=List[Document])
 async def get_user_documents(current_user: User = Depends(get_current_user)):
@@ -613,23 +620,53 @@ async def delete_document(file_hash: str, current_user: User = Depends(get_curre
     except Exception as e:
         print(f"Error deleting document: {str(e)}")  # Add logging
         raise HTTPException(status_code=500, detail=str(e))
+@router.delete("/session/{session_id}")
+async def delete_chat_session_route(session_id: str, current_user: PydanticUser = Depends(get_current_user)): # Renamed for clarity
+    """End and delete a specific chat session for the current user."""
+    if not current_user or not current_user.username:
+        logger.error("In /session/{session_id} DELETE: current_user or current_user.username is invalid.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user.")
 
-@router.get("/sessions")
-async def get_user_sessions(current_user: User = Depends(get_current_user)):
-    """Get all chat sessions for the current user within the last 15 days."""
+    logger.info(f"User {current_user.username} attempting to delete session: {session_id}")
     try:
-        sessions = await chat_session_manager.get_user_sessions(current_user.username)
-        return {
-            "sessions": [
-                {
-                    "session_id": session["session_id"],
-                    "created_at": session["created_at"],
-                    "last_activity": session["last_activity"],
-                    "preview": session["chat_history"][0]["prompt"] if session["chat_history"] else "New conversation",
-                    "document_count": len(session["active_documents"])
-                }
-                for session in sessions
-            ]
-        }
+        # --- MODIFIED HERE: Pass current_user.username ---
+        await chat_session_manager.end_session(session_id, current_user.username)
+        logger.info(f"Session {session_id} processed for deletion for user {current_user.username}.")
+        return {"message": "Session deleted successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        error_traceback = traceback.format_exc()
+        logger.critical(
+            f"CRITICAL ERROR in DELETE /session/{session_id} for user {current_user.username}. Error: {str(e)}\nTRACEBACK:\n{error_traceback}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal server error occurred while deleting the session."
+        )
+
+@router.get("/sessions", response_model=Dict[str, List[Dict[str, Any]]])
+async def get_user_sessions_list_route(current_user: PydanticUser = Depends(get_current_user)):
+    if not current_user or not current_user.username:
+        logger.error("In /sessions endpoint: current_user or current_user.username is invalid.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user information for fetching sessions."
+        )
+    
+    logger.info(f"Endpoint /sessions called by user: {current_user.username}")
+    try:
+        sessions_data = await chat_session_manager.get_user_sessions(current_user.username)
+        logger.info(f"ChatSessionManager returned {len(sessions_data)} sessions for user {current_user.username} to /sessions endpoint.")
+        return {"sessions": sessions_data}
+
+    except HTTPException as he:
+        logger.error(f"HTTPException in /sessions for user {current_user.username}: {he.detail}", exc_info=False)
+        raise he
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.critical(
+            f"CRITICAL UNHANDLED ERROR in /sessions endpoint for user {current_user.username}. Error: {str(e)}\nTRACEBACK:\n{error_traceback}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="An internal server error occurred while fetching your chat sessions. Please check server logs for details."
+        )
