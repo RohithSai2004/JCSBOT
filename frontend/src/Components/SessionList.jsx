@@ -8,7 +8,6 @@ import Sidebar from './Sidebar';
 import apiClient from '../api/apiClient';
 import { PlusCircle, Trash2, MessageSquareText, FileText as FileIconLucide, Loader2, ArchiveX, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AnimatePresence } from 'framer-motion';
 
 const SessionList = () => {
     const navigate = useNavigate();
