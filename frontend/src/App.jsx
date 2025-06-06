@@ -23,6 +23,7 @@ function App() {
         <Route path="/sessions" element={<SessionList />} />
         <Route path="/documents" element={<DocumentHistory />} />
         <Route path="/code-audit" element={<CodeAudit />} />
+        
         <Route path="/code-generation" element={<CodeGen />} />
       </Routes>
     </BrowserRouter>

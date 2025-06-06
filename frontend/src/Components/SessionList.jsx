@@ -1,15 +1,18 @@
 // frontend/src/Components/SessionList.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 import { format, isToday, isYesterday, parseISO } from 'date-fns'; // Added parseISO
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import apiClient from '../api/apiClient';
 import { PlusCircle, Trash2, MessageSquareText, FileText as FileIconLucide, Loader2, ArchiveX, Info } from 'lucide-react';
-import {  AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 
 const SessionList = () => {
     const navigate = useNavigate();
+    const { theme } = useTheme();
     const [sessions, setSessions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
