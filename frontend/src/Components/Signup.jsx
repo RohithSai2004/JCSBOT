@@ -2,13 +2,13 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import apiClient from '../api/apiClient';
-import { UserPlus, User, Lock, Mail, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { UserPlus, User, Lock, Mail, Eye, EyeOff, AlertCircle, CheckCircle2, UserCircle } from 'lucide-react'; // FIXED: Ensures UserCircle is imported
 import Logo from "../Assets/jaijcs.jpg";
 import { useTheme } from '../contexts/ThemeContext';
 
 const Signup = () => {
   const navigate = useNavigate();
-  const { theme } = useTheme();
+  const { theme } = useTheme(); // Assuming you have a working ThemeContext
   const [formData, setFormData] = useState({
     username: '', email: '', password: '', confirmPassword: '', full_name: ''
   });
@@ -36,14 +36,18 @@ const Signup = () => {
     }
     setLoading(true);
     try {
+      // Using FormData is correct for sending form fields to a FastAPI endpoint
+      // that expects `Form(...)` parameters.
       const formDataToSend = new FormData();
       formDataToSend.append('username', formData.username);
       formDataToSend.append('email', formData.email);
       formDataToSend.append('password', formData.password);
       formDataToSend.append('full_name', formData.full_name);
-      await apiClient.post('/register', formDataToSend, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-      });
+      
+      // Axios will automatically set the correct `Content-Type: multipart/form-data`
+      // header when you pass a FormData object. This will resolve the 400 Bad Request.
+      await apiClient.post('/register', formDataToSend);
+
       setSuccess('Account created successfully! Redirecting to login...');
       setTimeout(() => {
         navigate('/login?registered=true');
@@ -78,7 +82,7 @@ const Signup = () => {
             </div>
           )}
           {success && (
-            <div className="mb-4 bg-success/10 dark:bg-success/20 border border-success/30 dark:border-success/30 text-success dark:text-success/90 px-4 py-2.5 rounded-md text-sm flex items-center gap-2">
+            <div className="mb-4 bg-green-500/10 dark:bg-green-500/20 border border-green-500/30 text-green-600 dark:text-green-400 px-4 py-2.5 rounded-md text-sm flex items-center gap-2">
               <CheckCircle2 size={18}/> {success}
             </div>
           )}

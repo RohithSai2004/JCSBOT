@@ -9,11 +9,21 @@ import logging
 # Make sure these are correctly imported
 from app.db.mongodb import (
     chat_history_collection,
-    get_document_embeddings # Crucial for fetching chunk text
+    get_document_embeddings,  # Crucial for fetching chunk text
+    get_document_embeddings_for_document  # Added for fetching embeddings for a specific document
 )
-from app.utils.embeddings import get_embedding, cosine_similarity
+from app.utils.embeddings import get_embedding
 
 logger = logging.getLogger(__name__)
+
+def cosine_similarity(vec1, vec2):
+    """Calculate cosine similarity between two vectors."""
+    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+    magnitude1 = sum(a * a for a in vec1) ** 0.5
+    magnitude2 = sum(b * b for b in vec2) ** 0.5
+    if magnitude1 * magnitude2 == 0:
+        return 0
+    return dot_product / (magnitude1 * magnitude2)
 
 class ChatSession:
     # ... (keep __init__, add_message, save_to_db, load_from_db, get_context as previously corrected) ...
@@ -203,6 +213,70 @@ class ChatSession:
         logger.info(f"Session {self.session_id}: Combined document context generated (length: {len(combined_context)}). Used {len(used_document_hashes)} documents.")
         return combined_context, list(used_document_hashes)
 
+    async def get_document_context_for_specific_document(self, prompt: str, document_hash: str) -> Tuple[str, List[str]]:
+        """Get document context from a specific document only."""
+        try:
+            # Get embeddings for the prompt
+            prompt_embedding = get_embedding(prompt)
+            
+            # Get document embeddings for the specific document
+            document_embeddings = await get_document_embeddings_for_document(document_hash, self.user_id)
+            
+            if not document_embeddings:
+                logger.warning(f"No embeddings found for document {document_hash}")
+                return "", []
+            
+            # Calculate similarities and get the most relevant chunks
+            similarities = []
+            for embedding in document_embeddings:
+                similarity = cosine_similarity(prompt_embedding, embedding.embedding)
+                similarities.append((embedding, similarity))
+            
+            # Sort by similarity (highest first)
+            similarities.sort(key=lambda x: x[1], reverse=True)
+            
+            # Get the top chunks (adjust threshold as needed)
+            threshold = 0.7
+            top_chunks = []
+            used_documents = []
+            
+            for embedding, similarity in similarities[:5]:  # Get top 5 chunks
+                if similarity > threshold or len(top_chunks) < 1:  # Always include at least one chunk
+                    chunk_text = f"[Content from Document ID {embedding.document_hash[:6]}..., Chunk {embedding.chunk_id}]:\n{embedding.text}\n\n"
+                    top_chunks.append(chunk_text)
+                    if embedding.document_hash not in used_documents:
+                        used_documents.append(embedding.document_hash)
+                    logger.info(f"Session {self.session_id}: Using chunk {embedding.chunk_id} from doc {embedding.document_hash} (similarity: {similarity:.4f})")
+                else:
+                    logger.info(f"Session {self.session_id}: Skipping chunk {embedding.chunk_id} from doc {embedding.document_hash} (similarity: {similarity:.4f}, below threshold)")
+            
+            combined_context = "".join(top_chunks)
+            logger.info(f"Session {self.session_id}: Combined document context generated (length: {len(combined_context)}). Used {len(used_documents)} documents.")
+            
+            return combined_context, used_documents
+        except Exception as e:
+            logger.error(f"Error getting document context: {e}")
+            return "", []
+
+    async def get_conversation_history(self) -> str:
+        """Get formatted conversation history for context."""
+        try:
+            # Get the last few messages (adjust as needed)
+            history_limit = 5
+            if not self.chat_history or len(self.chat_history) == 0:
+                return ""
+            
+            # Format the conversation history
+            formatted_history = []
+            for i, msg in enumerate(self.chat_history[-history_limit:]):
+                formatted_history.append(f"User: {msg['prompt']}")
+                formatted_history.append(f"Assistant: {msg['response']}")
+            
+            return "\n\n".join(formatted_history)
+        except Exception as e:
+            print(f"Error getting conversation history: {e}")
+            return ""
+
 # ... (ChatSessionManager class with its methods: __init__, get_or_create_session, get_user_sessions, end_session)
 # Ensure get_user_sessions in ChatSessionManager uses projection {"_id": 0} and formats dates to ISO strings,
 # and generates previews robustly as discussed in previous answers.
@@ -307,3 +381,27 @@ class ChatSessionManager:
             logger.error(f"Error deleting session {session_id} for user {user_id} from DB: {e}", exc_info=True)
 
 chat_session_manager = ChatSessionManager()
+
+async def get_document_embeddings_for_document(document_hash: str, user_id: str):
+    """Get all embeddings for a specific document."""
+    try:
+        from app.db.mongodb import db
+        
+        # Find all embeddings for the specified document
+        cursor = db.document_embeddings.find({
+            "document_hash": document_hash,
+            "user_id": user_id
+        })
+        
+        # Convert cursor to list
+        embeddings = await cursor.to_list(length=None)
+        
+        if not embeddings:
+            print(f"No embeddings found for document {document_hash}")
+            return []
+            
+        print(f"Found {len(embeddings)} embeddings for document {document_hash}")
+        return embeddings
+    except Exception as e:
+        print(f"Error retrieving document embeddings: {e}")
+        return []

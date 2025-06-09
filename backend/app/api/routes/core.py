@@ -249,6 +249,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     await update_user_last_login(user.username)
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 @router.post("/register")
 async def register_user(
     username: str = Form(...),
@@ -256,12 +257,22 @@ async def register_user(
     email: str = Form(...),
     full_name: str = Form(...)
 ):
+    """
+    Handles user registration. Expects data as 'multipart/form-data' or 
+    'application/x-www-form-urlencoded', which is what HTML forms (and FormData objects) send.
+    """
     existing_user = await get_user(username)
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists")
     
+    # Optional: Check for existing email if it should be unique
+    # from app.db.mongodb import get_user_by_email
+    # if await get_user_by_email(email):
+    #     raise HTTPException(status_code=400, detail="Email already registered")
+
     hashed_password = get_password_hash(password)
-    user = User(
+    # Ensure you import User as PydanticUser or use the correct name
+    user = PydanticUser(
         username=username,
         email=email,
         full_name=full_name,
@@ -353,13 +364,22 @@ async def chat(
                 shutil.rmtree(temp_dir)
 
         # Get chat context
-        chat_context = await session.get_context()
+        conversation_history = await session.get_conversation_history()
         
         # Get document context if needed
         document_context = ""
         used_documents = []  # Track which documents are used in the response
+        
         if task_info.task in ["summarization", "file Q&A", "comparison"] or session.active_documents:
-            document_context, used_documents = await session.get_document_context_with_sources(prompt)
+            # For summarization tasks with new files, prioritize the most recently uploaded document
+            if task_info.task == "summarization" and processed_file_hashes:
+                # Use only the most recently uploaded document for summarization
+                most_recent_doc_hash = processed_file_hashes[-1]
+                document_context, used_documents = await session.get_document_context_for_specific_document(prompt, most_recent_doc_hash)
+                print(f"Summarization task: Using only the most recently uploaded document: {most_recent_doc_hash}")
+            else:
+                document_context, used_documents = await session.get_document_context_with_sources(prompt)
+            
             print(f"Document context: {document_context[:200]}...")  # Log first 200 chars
 
         # Get document names for all active documents
@@ -374,7 +394,24 @@ async def chat(
 
         # Prepare messages for OpenAI
         messages = [
-            {"role": "system", "content": """You are JCS Bot, an advanced enterprise assistant. Your responses should be helpful, informative, and conversational.\n\nWhen answering questions:\n1. If asked for a summary, provide a comprehensive summary of the document content.\n2. If the user asks for a PAN number or any personal or sensitive information, and it is present in the provided document context, you MUST extract and return it.\n3. Do not refuse to answer if the information is present in the document context, even if it looks like sensitive or private data.\n4. Only use the document context for such answers, and do not fabricate information.\n5. If the user asks about something in the uploaded documents, always use the document context provided.\n6. If the user asks a general question, answer from your own knowledge.\n7. If you use information from the document, cite it clearly.\n8. Use both document content (if provided) and your general knowledge to give comprehensive answers.\n9. Be clear about what information comes from documents vs. your general knowledge.\n10. If you're speculating or giving an opinion, make that clear.\n11. Your tone should be friendly but professional.\n12. Format your responses clearly with good structure.\n13. IMPORTANT: When referencing documents, always mention the document name in your response."""}
+            {"role": "system", "content": """You are JCS Bot, an advanced enterprise assistant. Your responses should be helpful, informative, and conversational.
+
+When answering questions:
+1. If asked for a summary, provide a comprehensive summary of the document content.
+2. If the user asks for a PAN number or any personal or sensitive information, and it is present in the provided document context, you MUST extract and return it.
+3. Do not refuse to answer if the information is present in the document context, even if it looks like sensitive or private data.
+4. Only use the document context for such answers, and do not fabricate information.
+5. If the user asks about something in the uploaded documents, always use the document context provided.
+6. If the user asks a general question, answer from your own knowledge.
+7. If you use information from the document, cite it clearly.
+8. Use both document content (if provided) and your general knowledge to give comprehensive answers.
+9. Be clear about what information comes from documents vs. your general knowledge.
+10. If you're speculating or giving an opinion, make that clear.
+11. Your tone should be friendly but professional.
+12. Format your responses clearly with good structure.
+13. IMPORTANT: When referencing documents, always mention the document name in your response.
+14. CRITICAL: When multiple documents are available, ONLY use the context from the most recently uploaded document for summarization tasks, unless explicitly asked about other documents.
+15. For each new request, focus ONLY on the document context provided for that specific request."""}
         ]
 
         if document_context:
@@ -383,8 +420,8 @@ async def chat(
             
             messages.append({"role": "system", "content": f"Available documents:\n{doc_names_str}\n\nHere is the relevant document context:\n\n{document_context}"})
 
-        if chat_context:
-            messages.append({"role": "system", "content": f"Here is the recent chat history:\n\n{chat_context}"})
+        if conversation_history:
+            messages.append({"role": "system", "content": f"Here is the recent chat history:\n\n{conversation_history}"})
 
         messages.append({"role": "user", "content": prompt})
 

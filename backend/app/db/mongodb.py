@@ -124,6 +124,24 @@ async def get_document_embeddings(document_hash: str, user_id: str) -> List[Docu
     embeddings = await cursor.to_list(length=None)
     return [DocumentEmbedding(**emb) for emb in embeddings]
 
+async def get_document_embeddings_for_document(document_hash: str, user_id: str) -> List[DocumentEmbedding]:
+    """Get document embeddings for a specific document."""
+    cursor = embeddings_collection.find({
+        "document_hash": document_hash,
+        "user_id": user_id
+    })
+    embeddings = []
+    async for doc in cursor:
+        embedding = DocumentEmbedding(
+            document_hash=doc["document_hash"],
+            chunk_id=doc["chunk_id"],
+            text=doc["text"],
+            embedding=doc["embedding"],
+            user_id=doc["user_id"]
+        )
+        embeddings.append(embedding)
+    return embeddings
+
 async def setup_mongodb_indexes():
     """Set up MongoDB indexes for optimal performance and data management."""
     # User collection indexes
@@ -149,4 +167,4 @@ async def setup_mongodb_indexes():
     # Embeddings collection indexes
     await embeddings_collection.create_index([("document_hash", 1), ("user_id", 1)])
     await embeddings_collection.create_index([("document_hash", 1), ("chunk_id", 1)])
-    await embeddings_collection.create_index("user_id") 
+    await embeddings_collection.create_index("user_id")

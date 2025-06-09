@@ -8,9 +8,9 @@ const API_BASE_URL = "/api";
 // Create axios instance with default config
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  // REMOVED: Default Content-Type header. 
+  // Axios will now correctly set 'application/json' for regular objects
+  // and 'multipart/form-data' for FormData objects (like in your signup form) automatically.
   withCredentials: true, // Important for CORS with credentials
 });
 
@@ -32,7 +32,10 @@ apiClient.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      // Redirect to login, but avoid doing so if we are already on the login page
+      if (window.location.pathname !== '/login') {
+         window.location.href = '/login?sessionExpired=true';
+      }
     }
     return Promise.reject(error);
   }
@@ -47,6 +50,7 @@ export const api = {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          // No Content-Type needed here, browser sets it for FormData
         },
         body: formData,
         signal: options.signal,
@@ -103,7 +107,7 @@ export const api = {
       };
     } catch (error) {
       if (error.name === 'AbortError') {
-        throw error;
+        throw error; // Let the caller handle abort
       }
       throw new Error(error.message || 'Failed to send message');
     }
@@ -111,76 +115,29 @@ export const api = {
 
   // Session management endpoints
   getSession: async (sessionId) => {
-    try {
-      const response = await apiClient.get(`/session/${sessionId}`);
-      return response.data;
-    } catch (error) {
-      console.error("Session Error:", error.response?.data || error.message);
-      throw error;
-    }
+    const response = await apiClient.get(`/session/${sessionId}`);
+    return response.data;
   },
 
   endSession: async (sessionId) => {
-    try {
-      const response = await apiClient.delete(`/session/${sessionId}`);
-      return response.data;
-    } catch (error) {
-      console.error("Session Error:", error.response?.data || error.message);
-      throw error;
-    }
-  },
-
-  // Add this new method
-  getSessions: async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/sessions`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Sessions Error:", error.message);
-      throw error;
-    }
+    const response = await apiClient.delete(`/session/${sessionId}`);
+    return response.data;
   },
 
   // Document management endpoints
   listDocuments: async () => {
-    try {
-      const response = await apiClient.get("/documents");
-      return response.data;
-    } catch (error) {
-      console.error("Document Error:", error.response?.data || error.message);
-      throw error;
-    }
+    const response = await apiClient.get("/documents");
+    return response.data;
   },
 
   getDocument: async (fileHash) => {
-    try {
-      const response = await apiClient.get(`/documents/${fileHash}`);
-      return response.data;
-    } catch (error) {
-      console.error("Document Error:", error.response?.data || error.message);
-      throw error;
-    }
+    const response = await apiClient.get(`/documents/${fileHash}`);
+    return response.data;
   },
 
   deleteDocument: async (fileHash) => {
-    try {
-      const response = await apiClient.delete(`/documents/${fileHash}`);
-      return response.data;
-    } catch (error) {
-      console.error("Document Error:", error.response?.data || error.message);
-      throw error;
-    }
+    const response = await apiClient.delete(`/documents/${fileHash}`);
+    return response.data;
   },
 
   // User memory endpoints
