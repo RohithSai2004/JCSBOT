@@ -2,11 +2,11 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Login from './Components/Login';
 import Signup from './Components/Signup';
-import Dashboard from './components/Dashboard';
-import SessionList from './components/SessionList';
-import DocumentHistory from './components/DocumentHistory';
-import CodeAudit from './components/CodeAudit';
-import CodeGen from './components/CodeGen';
+import Dashboard from './Components/Dashboard';
+import SessionList from './Components/SessionList';
+import DocumentHistory from './Components/DocumentHistory';
+import CodeAudit from './Components/CodeAudit';
+import CodeGen from './Components/CodeGen';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AnimatePresence, motion } from 'framer-motion';
 

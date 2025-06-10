@@ -142,7 +142,6 @@ class ChatSession:
             for msg in recent_messages if isinstance(msg, dict)
         ])
 
-    # --- THIS IS THE METHOD TO FIX ---
     async def get_document_context_with_sources(self, prompt: str, top_k_chunks: int = 3, similarity_threshold: float = 0.70) -> Tuple[str, List[str]]:
         """
         Get relevant document context based on the prompt by fetching document chunks,
@@ -165,8 +164,6 @@ class ChatSession:
 
         for doc_hash in self.active_documents:
             logger.debug(f"Session {self.session_id}: Fetching embeddings for doc_hash: {doc_hash}")
-            # get_document_embeddings should return a list of DocumentEmbedding Pydantic objects
-            # where each object has 'text' and 'embedding' attributes.
             chunk_embeddings_data = await get_document_embeddings(doc_hash, self.user_id) 
             
             if not chunk_embeddings_data:
@@ -190,7 +187,6 @@ class ChatSession:
 
             similarities.sort(reverse=True, key=lambda x: x[0])
             
-            # Collect relevant chunks based on threshold and top_k
             doc_relevant_texts = []
             for i, (sim, text, chunk_id) in enumerate(similarities):
                 if i < top_k_chunks and sim >= similarity_threshold:
@@ -216,32 +212,27 @@ class ChatSession:
     async def get_document_context_for_specific_document(self, prompt: str, document_hash: str) -> Tuple[str, List[str]]:
         """Get document context from a specific document only."""
         try:
-            # Get embeddings for the prompt
             prompt_embedding = get_embedding(prompt)
             
-            # Get document embeddings for the specific document
             document_embeddings = await get_document_embeddings_for_document(document_hash, self.user_id)
             
             if not document_embeddings:
                 logger.warning(f"No embeddings found for document {document_hash}")
                 return "", []
             
-            # Calculate similarities and get the most relevant chunks
             similarities = []
             for embedding in document_embeddings:
                 similarity = cosine_similarity(prompt_embedding, embedding.embedding)
                 similarities.append((embedding, similarity))
             
-            # Sort by similarity (highest first)
             similarities.sort(key=lambda x: x[1], reverse=True)
             
-            # Get the top chunks (adjust threshold as needed)
             threshold = 0.7
             top_chunks = []
             used_documents = []
             
-            for embedding, similarity in similarities[:5]:  # Get top 5 chunks
-                if similarity > threshold or len(top_chunks) < 1:  # Always include at least one chunk
+            for embedding, similarity in similarities[:5]:
+                if similarity > threshold or len(top_chunks) < 1:
                     chunk_text = f"[Content from Document ID {embedding.document_hash[:6]}..., Chunk {embedding.chunk_id}]:\n{embedding.text}\n\n"
                     top_chunks.append(chunk_text)
                     if embedding.document_hash not in used_documents:
@@ -261,12 +252,10 @@ class ChatSession:
     async def get_conversation_history(self) -> str:
         """Get formatted conversation history for context."""
         try:
-            # Get the last few messages (adjust as needed)
             history_limit = 5
             if not self.chat_history or len(self.chat_history) == 0:
                 return ""
             
-            # Format the conversation history
             formatted_history = []
             for i, msg in enumerate(self.chat_history[-history_limit:]):
                 formatted_history.append(f"User: {msg['prompt']}")
@@ -277,9 +266,6 @@ class ChatSession:
             print(f"Error getting conversation history: {e}")
             return ""
 
-# ... (ChatSessionManager class with its methods: __init__, get_or_create_session, get_user_sessions, end_session)
-# Ensure get_user_sessions in ChatSessionManager uses projection {"_id": 0} and formats dates to ISO strings,
-# and generates previews robustly as discussed in previous answers.
 class ChatSessionManager:
     def __init__(self):
         self.sessions: Dict[str, ChatSession] = {}
@@ -308,7 +294,6 @@ class ChatSessionManager:
         logger.info(f"New session {new_session_instance.session_id} created and saved for user {user_id}.")
         return new_session_instance
 
-
     async def get_user_sessions(self, user_id: str, days: int = 15) -> List[Dict]:
         cutoff_date = datetime.now() - timedelta(days=days)
         logger.info(f"Fetching sessions for user '{user_id}' active since {cutoff_date.isoformat()}")
@@ -316,7 +301,7 @@ class ChatSessionManager:
         try:
             cursor = chat_history_collection.find(
                 {"user_id": user_id, "last_activity": {"$gte": cutoff_date}},
-                {"_id": 0}  # Exclude the _id field
+                {"_id": 0}
             ).sort("last_activity", -1)
             sessions_from_db = await cursor.to_list(length=None)
         except Exception as e:
@@ -371,7 +356,7 @@ class ChatSessionManager:
         logger.info(f"Returning {len(processed_sessions)} processed sessions for user '{user_id}'.")
         return processed_sessions
 
-    async def end_session(self, session_id: str, user_id: str): # Added user_id
+    async def end_session(self, session_id: str, user_id: str):
         if session_id in self.sessions:
             del self.sessions[session_id]
         try:
@@ -381,27 +366,3 @@ class ChatSessionManager:
             logger.error(f"Error deleting session {session_id} for user {user_id} from DB: {e}", exc_info=True)
 
 chat_session_manager = ChatSessionManager()
-
-async def get_document_embeddings_for_document(document_hash: str, user_id: str):
-    """Get all embeddings for a specific document."""
-    try:
-        from app.db.mongodb import db
-        
-        # Find all embeddings for the specified document
-        cursor = db.document_embeddings.find({
-            "document_hash": document_hash,
-            "user_id": user_id
-        })
-        
-        # Convert cursor to list
-        embeddings = await cursor.to_list(length=None)
-        
-        if not embeddings:
-            print(f"No embeddings found for document {document_hash}")
-            return []
-            
-        print(f"Found {len(embeddings)} embeddings for document {document_hash}")
-        return embeddings
-    except Exception as e:
-        print(f"Error retrieving document embeddings: {e}")
-        return []

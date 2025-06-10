@@ -32,6 +32,7 @@ from typing import List, Dict, Any, Optional # Ensure all are imported
 from datetime import datetime, timedelta
 import traceback
 import logging
+from openai import AsyncOpenAI
 
 # Correctly import User Pydantic model and get_current_user
 # Adjust path if your User model or get_current_user are elsewhere
@@ -55,8 +56,8 @@ from openai import OpenAI
 load_dotenv()
 
 # Initialize OpenAI client
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # Update model name to a valid one
 MODEL_NAME = "gpt-4o-mini"  # or "gpt-4" if you have access
 
@@ -171,11 +172,9 @@ def text_to_chunks(text: str, chunk_size: int = 1000, overlap: int = 200) -> Lis
 
 # Document processing
 async def process_document(file_path: str, filename: str, user_id: str) -> Optional[str]:
-    """Process a document and return its hash."""
     try:
         file_hash = calculate_file_hash(file_path)
         
-        # Check if document already exists for this specific user
         existing_doc = await documents_collection.find_one({
             "file_hash": file_hash,
             "user_id": user_id
@@ -185,14 +184,12 @@ async def process_document(file_path: str, filename: str, user_id: str) -> Optio
             print(f"Document {filename} already exists for user {user_id} with hash {file_hash}")
             return file_hash
         
-        # Extract text using OCR service
-        text_content, success = ocr_service.extract_text(file_path)
+        text_content, success = await ocr_service.extract_text(file_path, user_id, file_hash)
         
         if not success:
             print(f"Could not extract text from {filename}")
             return None
         
-        # Create chunks and get embeddings
         chunks = text_to_chunks(text_content)
         chunk_embeddings = []
         
@@ -200,7 +197,6 @@ async def process_document(file_path: str, filename: str, user_id: str) -> Optio
             embedding = get_embedding(chunk)
             chunk_embeddings.append(embedding)
             
-            # Save chunk embedding with user_id
             doc_embedding = DocumentEmbedding(
                 document_hash=file_hash,
                 chunk_id=i,
@@ -210,7 +206,6 @@ async def process_document(file_path: str, filename: str, user_id: str) -> Optio
             )
             await save_document_embedding(doc_embedding)
         
-        # Save document with user_id
         document = Document(
             file_hash=file_hash,
             filename=filename,
@@ -224,6 +219,7 @@ async def process_document(file_path: str, filename: str, user_id: str) -> Optio
     except Exception as e:
         print(f"Error processing document: {e}")
         return None
+
 
 # API Endpoints
 @router.get("/")
@@ -286,6 +282,10 @@ async def register_user(
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
+# In backend/app/api/routes/core.py
+
+# In backend/app/api/routes/core.py
+
 @router.post("/chat")
 async def chat(
     request: Request,
@@ -297,51 +297,23 @@ async def chat(
 ):
     try:
         user_id = current_user.username
-        # Log inputs for debugging
-        print(f"Task: {task}")
-        print(f"Prompt: {prompt}")
-        print(f"User ID: {user_id}")
-        print(f"Files: {[file.filename for file in files] if files else 'No files'}")
-        print(f"Session ID: {session_id}")
+        original_prompt = prompt  # Keep the original prompt for history
 
-        # Get or create chat session
+        logger.info(f"Task: {task}, Prompt: {original_prompt}, User ID: {user_id}")
         session = await chat_session_manager.get_or_create_session(user_id, session_id)
-        print(f"Using session: {session.session_id}")
-
-        # Validate input
         task_info = await validate_user_input(prompt, task, files)
 
-        # Process new files if any
         processed_file_hashes = []
-        processed_filenames = {}  # Store filename mapping to hash
+        processed_filenames = {}
         if files:
             temp_dir = tempfile.mkdtemp()
             try:
                 for file in files:
-                    if not file.filename:
-                        continue
-                    
-                    # Check file size
-                    file_size = 0
-                    chunk_size = 1024 * 1024  # 1MB chunks
+                    if not file.filename: continue
                     file_path = os.path.join(temp_dir, file.filename)
-                    
                     with open(file_path, "wb") as f:
-                        while True:
-                            chunk = await file.read(chunk_size)
-                            if not chunk:
-                                break
-                            file_size += len(chunk)
-                            f.write(chunk)
-                            
-                            # Check if file is too large
-                            if file_size > MAX_FILE_SIZE_BYTES:
-                                raise HTTPException(
-                                    status_code=400,
-                                    detail=f"File {file.filename} is too large. Maximum size is {MAX_FILE_SIZE_MB}MB."
-                                )
+                        shutil.copyfileobj(file.file, f)
                     
-                    # Process document in chunks if it's a large PDF
                     if file.filename.lower().endswith('.pdf'):
                         file_hash = await process_large_document(file_path, file.filename, user_id)
                     else:
@@ -349,52 +321,74 @@ async def chat(
                         
                     if file_hash:
                         processed_file_hashes.append(file_hash)
-                        processed_filenames[file_hash] = file.filename  # Store filename with hash
-                        # Add document to active documents in session
+                        processed_filenames[file_hash] = file.filename
                         if file_hash not in session.active_documents:
                             session.active_documents.append(file_hash)
-                            # Save session after adding document
                             await session.save_to_db()
-            except Exception as e:
-                print(f"Error processing files: {str(e)}")
-                print(f"Document hashes: None")
-                print(f"Error extracting text via OCR: {str(e)}")
-                print(f"Could not extract text from {[file.filename for file in files]}")
             finally:
                 shutil.rmtree(temp_dir)
 
-        # Get chat context
         conversation_history = await session.get_conversation_history()
-        
-        # Get document context if needed
         document_context = ""
-        used_documents = []  # Track which documents are used in the response
+        used_documents = []
         
-        if task_info.task in ["summarization", "file Q&A", "comparison"] or session.active_documents:
-            # For summarization tasks with new files, prioritize the most recently uploaded document
-            if task_info.task == "summarization" and processed_file_hashes:
-                # Use only the most recently uploaded document for summarization
-                most_recent_doc_hash = processed_file_hashes[-1]
-                document_context, used_documents = await session.get_document_context_for_specific_document(prompt, most_recent_doc_hash)
-                print(f"Summarization task: Using only the most recently uploaded document: {most_recent_doc_hash}")
-            else:
-                document_context, used_documents = await session.get_document_context_with_sources(prompt)
+        is_focused_task = (
+            (files and processed_file_hashes) and
+            any(keyword in prompt.lower() for keyword in ["summary", "summarize", "summarise", "explain", "detail"])
+        )
+
+        if is_focused_task:
+            doc_hash_to_focus = processed_file_hashes[-1]
+            filename_to_focus = processed_filenames.get(doc_hash_to_focus, "the uploaded document")
+            prompt = f"{prompt}: '{filename_to_focus}'" # Make prompt specific
             
-            print(f"Document context: {document_context[:200]}...")  # Log first 200 chars
+            logger.info(f"Focused Task: Getting FULL TEXT of document: {doc_hash_to_focus}")
+            document_object = await get_document(doc_hash_to_focus, user_id)
+            if document_object:
+                document_context = document_object.content
+                used_documents = [doc_hash_to_focus]
+        
+        elif session.active_documents:
+            logger.info("Standard context retrieval: Using similarity search across all active documents.")
+            document_context, used_documents = await session.get_document_context_with_sources(prompt)
 
-        # Get document names for all active documents
-        document_names = {}
-        for doc_hash in session.active_documents:
-            doc = await get_document(doc_hash, user_id)
-            if doc:
-                document_names[doc_hash] = doc.filename
+        system_prompt = ""
+        if is_focused_task and any(keyword in original_prompt.lower() for keyword in ["summary", "summarize", "summarise"]):
+            logger.info("Using multi-record data extraction prompt for summarization.")
+            system_prompt = ""
+        if is_focused_task and any(keyword in original_prompt.lower() for keyword in ["summary", "summarize", "summarise", "explain", "detail"]):
+            logger.info("Using new master prompt for descriptive and structured analysis.")
+            # This new "Master Prompt" handles all document types and output styles.
+            system_prompt = """
+            You are an expert document analyst AI. Your task is to provide a comprehensive analysis of any document provided, following a strict two-part structure. This must be applied to ALL document types, including resumes, invoices, legal affidavits, financial statements, press releases, identification cards, and more.
 
-        # Add newly processed documents to the mapping
-        document_names.update(processed_filenames)
+            **Part 1: Document Description**
+            First, begin your response with a concise introductory paragraph. In this paragraph, you MUST identify:
+            1. The specific type of document (e.g., "This document is a Curriculum Vitae (CV)...", "This document is a Customer Service Form (CSF)...", "This is an e-PAN Card...").
+            2. The document's primary purpose.
+            3. The main subject, individual, or company it concerns.
 
-        # Prepare messages for OpenAI
-        messages = [
-            {"role": "system", "content": """You are JCS Bot, an advanced enterprise assistant. Your responses should be helpful, informative, and conversational.
+            **Part 2: Detailed Data Extraction**
+            After the introductory paragraph, provide a detailed, structured breakdown of the document's contents.
+            - Use clear Markdown headings (e.g., `### Personal Information`, `### Academic Qualifications`, `### Order Details`, `### Key Clauses`). Adapt the headings to be relevant to the document's content.
+            - Extract all relevant data points under these headings. Be thorough and capture details from every page.
+            - For documents containing records of multiple people or items, create a separate, clearly marked section for each one (e.g., `### 1. [Full Name]`, `### 2. [Full Name]`).
+            - **CRITICAL:** Do not mix information between different sections or records. Ensure all data is accurately assigned.
+
+            **Example Structure:**
+
+            This document is a [Document Type] for [Main Subject], outlining its [Primary Purpose].
+
+            ### [Relevant Heading 1]
+            - **[Data Point A]:** [Extracted Value]
+            - **[Data Point B]:** [Extracted Value]
+
+            ### [Relevant Heading 2]
+            - **[Data Point C]:** [Extracted Value]
+            """
+        else:
+            logger.info("Using general Q&A prompt with page-awareness.")
+            system_prompt = """You are JCS Bot, an advanced enterprise assistant. Your responses should be helpful, informative, and conversational.
 
 When answering questions:
 1. If asked for a summary, provide a comprehensive summary of the document content.
@@ -410,189 +404,162 @@ When answering questions:
 11. Your tone should be friendly but professional.
 12. Format your responses clearly with good structure.
 13. IMPORTANT: When referencing documents, always mention the document name in your response.
-14. CRITICAL: When multiple documents are available, ONLY use the context from the most recently uploaded document for summarization tasks, unless explicitly asked about other documents.
-15. For each new request, focus ONLY on the document context provided for that specific request."""}
-        ]
+14. CRITICAL: When multiple documents are available, ONLY use the context from the most recently uploaded document for summarization or detail explanation tasks, unless explicitly asked about other documents.
+15. For each new request, focus ONLY on the document context provided for that specific request.
+16. The document text may contain page separators like '--- PAGE BREAK ---'. If the user asks what is on a specific page (e.g., 'what is on page 2?'), use these separators to identify and answer using only the content from that specific page.
+"""
 
+        messages = [{"role": "system", "content": system_prompt}]
+        
         if document_context:
-            # Add document names to context
-            doc_names_str = "\n".join([f"- {doc_hash}: {document_names.get(doc_hash, f'Document {doc_hash[:8]}...')}" for doc_hash in session.active_documents])
+            document_names = {h: processed_filenames.get(h) for h in processed_file_hashes}
+            for doc_hash in session.active_documents:
+                if doc_hash not in document_names:
+                    doc = await get_document(doc_hash, user_id)
+                    if doc: document_names[doc_hash] = doc.filename
             
+            doc_names_str = "\n".join([f"- {h}: {name}" for h, name in document_names.items() if name])
             messages.append({"role": "system", "content": f"Available documents:\n{doc_names_str}\n\nHere is the relevant document context:\n\n{document_context}"})
 
-        if conversation_history:
+        # Isolate focused tasks from chat history to avoid confusion
+        if not is_focused_task and conversation_history:
+            logger.info("Adding conversation history to the prompt.")
             messages.append({"role": "system", "content": f"Here is the recent chat history:\n\n{conversation_history}"})
 
+        # Use the potentially modified prompt for the LLM call
         messages.append({"role": "user", "content": prompt})
-
-        # Create an async generator for streaming
-        async def stream_openai_response():
+        
+        async def generate_response():
+            full_response_text = ""
             try:
-                # Get streaming response from OpenAI
-                stream = openai_client.chat.completions.create(
+                # This is the correct async pattern for openai > 1.0
+                stream = await openai_client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=messages,
                     stream=True
                 )
-
-                for chunk in stream:
+                async for chunk in stream:
                     if chunk.choices[0].delta.content:
                         content = chunk.choices[0].delta.content
-                        # Send the chunk as a JSON object
+                        full_response_text += content
                         yield f"data: {json.dumps({'chunk': content})}\n\n"
-
             except Exception as e:
-                print(f"Error during OpenAI streaming: {e}")
-                # Yield an error chunk if streaming fails
+                logger.error(f"OpenAI streaming error: {e}", exc_info=True)
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                full_response_text = f"Error: {str(e)}"
 
-        # Use an async generator to yield chunks and handle post-streaming actions
-        async def generate_response():
-            # Iterate over the streaming generator and yield its output
-            full_response_text = ""
-            async for chunk_data in stream_openai_response():
-                yield chunk_data # Yield the data lines from the streaming generator
-                # Extract the content from the chunk data line to reconstruct the full response
-                if chunk_data.strip().startswith('data: '):
-                    try:
-                        data = json.loads(chunk_data.strip()[len('data: '):])
-                        if 'chunk' in data:
-                            full_response_text += data['chunk']
-                        # If an error chunk was yielded, capture the error message
-                        if 'error' in data:
-                             full_response_text = "Error: " + data['error']
-                    except json.JSONDecodeError:
-                        print(f"Failed to decode JSON from chunk_data: {chunk_data}")
-
-            # After streaming is complete, save the message and session
             try:
-                # Create metadata about documents used in this response
-                document_metadata = {
-                    "used_documents": used_documents,
-                    "document_names": {hash: document_names.get(hash, "Unknown") for hash in used_documents}
-                }
+                document_metadata = { "used_documents": used_documents, "document_names": {h: document_names.get(h, "Unknown") for h in used_documents}}
+                await session.add_message(original_prompt, full_response_text, processed_file_hashes, document_metadata)
                 
-                await session.add_message(prompt, full_response_text, processed_file_hashes, document_metadata)
-                await session.save_to_db()
-                 
-                # Send final message with session info and document metadata
-                success_data = {
-                    'done': True, 
-                    'session_id': session.session_id, 
-                    'active_documents': session.active_documents,
-                    'document_names': document_names
-                }
+                final_doc_names = {}
+                for doc_hash in session.active_documents:
+                    doc = await get_document(doc_hash, user_id)
+                    if doc: final_doc_names[doc_hash] = doc.filename
+
+                success_data = {'done': True, 'session_id': session.session_id, 'active_documents': session.active_documents, 'document_names': final_doc_names}
                 yield f"data: {json.dumps(success_data)}\n\n"
             except Exception as e:
-                print(f"Error saving message or session: {e}")
-                error_data = {
-                    'done': True,
-                    'session_id': session.session_id,
-                    'active_documents': session.active_documents,
-                    'error': str(e)
-                }
-                yield f"data: {json.dumps(error_data)}\n\n"
+                logger.error(f"Error saving message or session: {e}", exc_info=True)
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
-        return StreamingResponse(
-            generate_response(),
-            media_type="text/event-stream"
-        )
+        return StreamingResponse(generate_response(), media_type="text/event-stream")
 
     except Exception as e:
-        print(f"Error processing request: {e}")
-        # Return a standard JSON error response for initial request processing errors
+        logger.error(f"Error in chat endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to process request: {str(e)}")
-
 async def process_large_document(file_path: str, filename: str, user_id: str) -> Optional[str]:
-    """Process a large document in chunks to handle API limits."""
+    """
+    Processes a PDF. It attempts a fast, direct text extraction. If the PDF is
+    digital and text is extracted, it proceeds directly to embedding. If the fast
+    method fails or yields no text (i.e., the PDF is scanned), it falls back
+    to the Gemini OCR service.
+    """
     try:
         file_hash = calculate_file_hash(file_path)
         
-        # Check if document already exists
         existing_doc = await documents_collection.find_one({
             "file_hash": file_hash,
             "user_id": user_id
         })
         
         if existing_doc:
-            print(f"Document {filename} already exists for user {user_id} with hash {file_hash}")
+            logger.info(f"Document {filename} already exists for user {user_id} with hash {file_hash}")
             return file_hash
+
+        final_text = ""
+        success = False
         
-        # Open PDF and get total pages
-        doc = fitz.open(file_path)
-        total_pages = doc.page_count
-        print(f"Processing large document with {total_pages} pages")
+        # Step 1: Attempt fast, direct text extraction with PyMuPDF (fitz)
+        try:
+            logger.info(f"Attempting fast text extraction for {filename}...")
+            fitz_text = ""
+            with fitz.open(file_path) as doc:
+                for page_num in range(len(doc)):
+                    page = doc.load_page(page_num)
+                    fitz_text += page.get_text()
+            
+            # Step 2: Check if the extracted text is meaningful
+            if len(fitz_text.strip()) > 100:
+                logger.info(f"Successfully extracted text using fast method for {filename}. Proceeding directly to embeddings.")
+                final_text = fitz_text
+                success = True  # Mark as successful to skip the OCR step
+            else:
+                logger.info("Fast extraction yielded minimal text. Falling back to full OCR.")
+                
+        except Exception as e:
+            logger.warning(f"Fast text extraction failed for {filename}: {e}. Falling back to full OCR.")
+
+        # Step 3: If fast extraction was not successful, fall back to Gemini OCR
+        if not success:
+            logger.info(f"Extracting text from {filename} using Gemini OCR service...")
+            # Note: The 'clean_extracted_text' step is now removed.
+            final_text, success = await ocr_service.extract_text(file_path, user_id, file_hash)
+            if not success:
+                logger.error(f"Full OCR process also failed for {filename}.")
+                return None
         
-        # Process in chunks of 50 pages
-        chunk_size = 50
-        all_text = []
-        all_embeddings = []
+        # Step 4: Final check before proceeding
+        if not final_text:
+            logger.error(f"Could not extract text from {filename} using any method.")
+            return None
         
-        for start_page in range(0, total_pages, chunk_size):
-            end_page = min(start_page + chunk_size, total_pages)
-            print(f"Processing pages {start_page+1} to {end_page}")
-            
-            # Extract text from chunk
-            chunk_text = ""
-            for page_num in range(start_page, end_page):
-                page = doc[page_num]
-                chunk_text += page.get_text()
-            
-            # Process chunk with OCR if needed
-            if len(chunk_text.strip()) < 100:  # If chunk has little text, use OCR
-                # Call extract_text_from_pdf with the correct number of arguments
-                chunk_text, success = await ocr_service.extract_text_from_pdf(file_path, start_page, end_page)
-                if not success:
-                    print(f"Could not extract text from pages {start_page+1} to {end_page}")
-                    continue
-            
-            all_text.append(chunk_text)
-            
-            # Create chunks and get embeddings
-            text_chunks = text_to_chunks(chunk_text)
-            for i, chunk in enumerate(text_chunks):
-                try:
-                    # Call get_embedding without await since it's not async
-                    embedding = get_embedding(chunk)
-                    if embedding:  # Only add if we got a valid embedding
-                        all_embeddings.append(embedding)
-                        
-                        # Save chunk embedding
-                        doc_embedding = DocumentEmbedding(
-                            document_hash=file_hash,
-                            chunk_id=len(all_embeddings) - 1,
-                            text=chunk,
-                            embedding=embedding,
-                            user_id=user_id
-                        )
-                        await save_document_embedding(doc_embedding)
-                except Exception as e:
-                    print(f"Error getting embedding for chunk {i}: {e}")
-                    continue
-            
-            # Add a small delay to prevent API rate limits
-            await asyncio.sleep(1)
+        logger.info(f"Text processing complete. Total length: {len(final_text)}. Proceeding to embeddings.")
         
-        # Combine all text
-        full_text = "\n\n".join(all_text)
+        # Step 5: Chunk the final text and generate embeddings.
+        text_chunks = text_to_chunks(final_text)
         
-        # Save document
+        for i, chunk in enumerate(text_chunks):
+            try:
+                embedding = get_embedding(chunk)
+                if embedding:
+                    doc_embedding = DocumentEmbedding(
+                        document_hash=file_hash,
+                        chunk_id=i,
+                        text=chunk,
+                        embedding=embedding,
+                        user_id=user_id
+                    )
+                    await save_document_embedding(doc_embedding)
+            except Exception as e:
+                logger.error(f"Error getting or saving embedding for chunk {i}: {e}")
+                continue
+        
+        # Step 6: Save the main document metadata.
         document = Document(
             file_hash=file_hash,
             filename=filename,
             user_id=user_id,
-            content=full_text,
-            embeddings=all_embeddings[0] if all_embeddings else []
+            content=final_text,
+            embeddings=[] # Representative embedding can be managed as before
         )
         await save_document(document)
         
-        doc.close()
         return file_hash
         
     except Exception as e:
-        print(f"Error processing large document: {e}")
+        logger.error(f"Error in process_large_document for {filename}: {e}", exc_info=True)
         return None
-
 @router.get("/health")
 async def health_check():
     """Check if the API is running."""

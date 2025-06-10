@@ -1,15 +1,5 @@
-"""
-Advanced PDF Processing with Gemini
+# In backend/app/services/ocr_service.py
 
-Dependencies:
-    - google-generativeai: For Gemini API
-    - python-dotenv: Environment variable management
-    - PyPDF2: For splitting PDFs into single-page chunks
-
-Environment Setup:
-    Requires:
-        - GOOGLE_API_KEY in .env file
-"""
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -18,169 +8,120 @@ import logging
 import concurrent.futures
 from io import BytesIO
 import functools
-from app.utils.embeddings import get_embedding
-from app.db.mongodb import save_document_embedding, DocumentEmbedding
+import asyncio
+from openai import OpenAI
+import fitz  # PyMuPDF is used for rendering pages to images
 
-# Optional imports for PDF splitting
 try:
     from PyPDF2 import PdfReader, PdfWriter
 except ImportError:
     PdfReader = None
     PdfWriter = None
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("ocr_service.log"),
-        logging.StreamHandler()
-    ]
-)
 logger = logging.getLogger(__name__)
 
-# Cache for API responses
-response_cache = {}
+def get_high_accuracy_ocr_prompt():
+    """
+    Creates a highly specific prompt to ensure the AI performs a thorough OCR transcription.
+    """
+    return """
+    You are a world-class OCR (Optical Character Recognition) engine. Your sole task is to transcribe the content of the provided single image with perfect accuracy.
 
-def get_optimized_prompt():
-    return ("Extract text content from this PDF page efficiently. Include all plain text and table data. "
-            "Format tables as Markdown. Be comprehensive but focus on speed and accuracy. "
-            "Return only the extracted content without explanations or summaries.")
+    **CRITICAL RULES:**
+    1.  **TRANSCRIBE EVERYTHING:** You must capture every single piece of text on the page, regardless of size or location. This includes all text in headers, footers, the main body, sidebars, tables, and image captions.
+    2.  **NO OMISSIONS:** Do not skip or overlook any detail, no matter how minor it may seem.
+    3.  **NO SUMMARIZATION:** Do not summarize, interpret, or change the original meaning. You must perform a literal transcription.
+    4.  **PRESERVE STRUCTURE:** Maintain the original structure, including paragraphs, line breaks, and lists.
+    5.  **TABLES:** All tables must be perfectly formatted as Markdown.
+    6.  **OUTPUT:** Your output must be ONLY the transcribed text. Do not add any conversational text, introductions, or explanations.
+    """
+
+def process_page_as_image(chunk_data, model):
+    """
+    Takes a single PDF page's byte data, converts it to a high-resolution image,
+    and sends it to the AI model for OCR.
+    """
+    pdf_bytes, page_number = chunk_data
+    try:
+        pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        page = pdf_doc[0]
+        
+        # Render the page to a high-resolution PNG image (300 DPI is excellent for OCR)
+        pix = page.get_pixmap(dpi=300)
+        img_bytes = pix.tobytes("png")
+        
+        image_part = {"mime_type": "image/png", "data": img_bytes}
+        prompt_part = get_high_accuracy_ocr_prompt()
+        
+        response = model.generate_content(
+            contents=[prompt_part, image_part],
+            generation_config={"temperature": 0.0}
+        )
+        return response.text
+    except Exception as e:
+        logger.error(f"Error processing page {page_number + 1} as image: {str(e)}")
+        return f"Error processing page {page_number + 1}"
+    finally:
+        if 'pdf_doc' in locals() and pdf_doc:
+            pdf_doc.close()
 
 def split_pdf_to_pages(pdf_bytes):
-    if not PdfReader or not PdfWriter:
-        raise ImportError("PyPDF2 is required for PDF splitting.")
+    if not PdfReader:
+        raise ImportError("PyPDF2 is required for this function.")
     reader = PdfReader(BytesIO(pdf_bytes))
-    total_pages = len(reader.pages)
     chunks = []
-    for i in range(total_pages):
+    for i in range(len(reader.pages)):
         writer = PdfWriter()
         writer.add_page(reader.pages[i])
         output = BytesIO()
         writer.write(output)
         output.seek(0)
-        chunks.append((output.getvalue(), i))  # (pdf_bytes, page_number)
+        chunks.append((output.getvalue(), i))
     return chunks
-
-def process_pdf_page_chunk(chunk_data, model):
-    pdf_bytes, page_number = chunk_data
-    cache_key = hash(pdf_bytes[:1024])
-    if cache_key in response_cache:
-        logger.info(f"Using cached response for page {page_number+1}")
-        return response_cache[cache_key]
-    pdf_part = {"mime_type": "application/pdf", "data": pdf_bytes}
-    text_part = get_optimized_prompt()
-    try:
-        response = model.generate_content(
-            contents=[pdf_part, text_part],
-            generation_config={
-                "temperature": 0.0,
-                "top_p": 0.95,
-                "max_output_tokens": 8192
-            }
-        )
-        result = response.text
-        response_cache[cache_key] = result
-        return result
-    except Exception as e:
-        logger.error(f"Error processing page {page_number+1}: {str(e)}")
-        return f"Error processing page {page_number+1}: {str(e)}"
 
 class OCRService:
     def __init__(self):
-        # Load environment variables
         load_dotenv()
         self.api_key = os.getenv("GOOGLE_API_KEY")
         if not self.api_key:
             raise ValueError("GOOGLE_API_KEY not set in environment variables")
         genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
-
-    def _extract_with_gemini(self, file_path: str, prompt: str) -> Tuple[str, bool]:
-        try:
-            with open(file_path, 'rb') as file:
-                file_bytes = file.read()
-            # Determine mime type
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext == '.pdf':
-                mime_type = 'application/pdf'
-            elif ext in ['.jpg', '.jpeg']:
-                mime_type = 'image/jpeg'
-            elif ext == '.png':
-                mime_type = 'image/png'
-            elif ext == '.docx':
-                mime_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-            else:
-                mime_type = 'application/octet-stream'
-            file_part = {"mime_type": mime_type, "data": file_bytes}
-            response = self.model.generate_content(
-                contents=[file_part, prompt]
-            )
-            text = getattr(response, 'text', None)
-            if text:
-                return text, True
-            return "", False
-        except Exception as e:
-            logger.error(f"Error extracting text with Gemini: {e}")
-            return "", False
+        
+        # MODEL UPGRADE FOR HIGHER QUALITY
+        self.model = genai.GenerativeModel('gemini-1.5-pro')
+        
+        self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     async def extract_text_from_pdf(self, file_path: str, user_id: Optional[str] = None, document_hash: Optional[str] = None) -> Tuple[str, bool]:
+        """
+        High-accuracy OCR: Splits PDF, converts each page to a high-res image,
+        and sends to Gemini 1.5 Pro for transcription.
+        """
         try:
-            import asyncio
             with open(file_path, 'rb') as file:
                 pdf_bytes = file.read()
-            # Always split into single-page chunks
-            chunks = split_pdf_to_pages(pdf_bytes)
+
+            page_chunks = split_pdf_to_pages(pdf_bytes)
             loop = asyncio.get_event_loop()
-            # Process all pages in parallel using run_in_executor
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                tasks = [loop.run_in_executor(executor, functools.partial(process_pdf_page_chunk, model=self.model), chunk) for chunk in chunks]
+            
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                tasks = [loop.run_in_executor(executor, functools.partial(process_page_as_image, model=self.model), chunk) for chunk in page_chunks]
                 page_texts = await asyncio.gather(*tasks)
-            # For each page, generate embedding and store in DB
-            all_text = []
-            for i, text in enumerate(page_texts):
-                all_text.append(text)
-                if user_id and document_hash:
-                    embedding = get_embedding(text)
-                    doc_embedding = DocumentEmbedding(
-                        document_hash=document_hash,
-                        chunk_id=i,
-                        text=text,
-                        embedding=embedding,
-                        user_id=user_id
-                    )
-                    await save_document_embedding(doc_embedding)
-            combined_result = "\n\n".join(all_text)
-            if combined_result:
-                return combined_result, True
-            return "", False
+            
+            combined_result = "\n\n--- PAGE BREAK ---\n\n".join(page_texts)
+            return (combined_result, True) if "Error processing page" not in combined_result else (combined_result, False)
         except Exception as e:
-            logger.error(f"Error extracting text from PDF with Gemini: {e}")
+            logger.error(f"Error in extract_text_from_pdf: {e}", exc_info=True)
             return "", False
 
-    async def extract_text_from_image(self, file_path: str) -> Tuple[str, bool]:
-        prompt = ("Extract all the text content from the provided image. Maintain the original structure, "
-                  "including headers, paragraphs, and any content. Format tables in Markdown if present. "
-                  "Ensure no text is excluded.")
-        return self._extract_with_gemini(file_path, prompt)
-
-    async def extract_text_from_docx(self, file_path: str) -> Tuple[str, bool]:
-        prompt = ("Extract all the text content, including both plain text and tables, from the provided Word document. "
-                  "Maintain the original structure, including headers, paragraphs, and any content preceding or following tables. "
-                  "Format tables in Markdown, preserving numerical data and relationships. Ensure no text is excluded, including any introductory or explanatory text before or after the tables.")
-        return self._extract_with_gemini(file_path, prompt)
-
+    # This function is no longer needed for the primary OCR flow but can be kept for other purposes
+    # or removed if you have refactored all calls to it.
+    async def clean_extracted_text(self, raw_text: str) -> str:
+        pass
+    
     async def extract_text(self, file_path: str, user_id: Optional[str] = None, document_hash: Optional[str] = None) -> Tuple[str, bool]:
         ext = os.path.splitext(file_path)[1].lower()
         if ext == '.pdf':
             return await self.extract_text_from_pdf(file_path, user_id=user_id, document_hash=document_hash)
-        elif ext in ['.jpg', '.jpeg', '.png']:
-            return await self.extract_text_from_image(file_path)
-        elif ext == '.docx':
-            return await self.extract_text_from_docx(file_path)
-        else:
-            logger.error(f"Unsupported file type for Gemini OCR: {file_path}")
-            return "", False
-
-    def cleanup(self):
-        pass  # No resources to clean up for Gemini API
+        # Add other file types here if needed
+        return "", False
