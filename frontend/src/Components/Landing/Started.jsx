@@ -9,10 +9,10 @@ const Started = () => {
           Ready to <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-blue-500">get started</span>
         </h2>
         <p className="text-gray-600 mb-8">
-          Join thousands of users already enhancing their productivity with JAI JCS intelligent assistance.
+          Join thousands of users already enhancing their productivity with JAi JCS intelligent assistance.
         </p>
-        <Link to="/" className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-full text-lg transition duration-300">
-          Explore JAI JCS Dashboard
+        <Link to="/dashboard" className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-full text-lg transition duration-300">
+          Explore JAi JCS Dashboard
         </Link>
       </div>
     </div>

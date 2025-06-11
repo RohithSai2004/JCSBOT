@@ -10,10 +10,10 @@ const About = () => {
       {/* Hero Section */}
       <section className="text-center py-20 bg-gradient-to-br from-purple-100 via-white to-blue-100 px-4">
         <h1 className="text-4xl sm:text-5xl font-extrabold mb-4 text-gray-900">
-          About <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-500">JAI JCS</span>
+          About <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-500">JAi JCS</span>
         </h1>
         <p className="text-lg max-w-3xl mx-auto text-gray-700">
-          JAI JCS is an advanced generative AI solution that revolutionizes how individuals and businesses interact with data, automate tasks, and boost productivity.
+          JAi JCS is an advanced generative AI solution that revolutionizes how individuals and businesses interact with data, automate tasks, and boost productivity.
         </p>
       </section>
 
@@ -38,7 +38,7 @@ const About = () => {
       {/* Why Choose JAI JCS */}
       <section className="py-16 px-6 bg-gray-50">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-gray-800">Why Choose JAI JCS?</h2>
+          <h2 className="text-3xl font-bold text-gray-800">Why Choose JAi JCS?</h2>
           <p className="text-gray-600 mt-2 max-w-2xl mx-auto">
             Discover a smarter way to work with AI that's built for real-world results.
           </p>
@@ -93,12 +93,12 @@ const About = () => {
 
       {/* CTA */}
       <section className="py-20 bg-white text-center px-6">
-        <h2 className="text-4xl font-bold mb-4 text-gray-800">Ready to Experience the Power of JAI JCS?</h2>
+        <h2 className="text-4xl font-bold mb-4 text-gray-800">Ready to Experience the Power of JAi JCS?</h2>
         <p className="max-w-xl mx-auto mb-6 text-lg text-gray-600">
           Start your journey today with AI that understands your goals and simplifies your workflow.
         </p>
         <Link
-          to="/"
+          to="/dashboard"
           className="bg-gradient-to-r from-purple-600 to-blue-500 text-white font-semibold px-6 py-3 rounded-full shadow hover:shadow-lg transition"
         >
           Get Started

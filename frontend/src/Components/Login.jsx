@@ -65,7 +65,7 @@ const Login = () => {
       <div className="relative z-10 w-full max-w-md">
         <Link to="/landing" className="flex justify-center items-center gap-3 mb-8 group">
             <img src={Logo} alt="JCS AI Logo" className="h-14 w-14 object-contain rounded-2xl shadow-lg transition-all duration-300 group-hover:scale-110" />
-            <span className="text-3xl font-bold text-foreground dark:text-dark-foreground group-hover:text-primary dark:group-hover:text-dark-primary transition-colors">JAI Assistant</span>
+            <span className="text-3xl font-bold text-foreground dark:text-dark-foreground group-hover:text-primary dark:group-hover:text-dark-primary transition-colors">JAi Assistant</span>
         </Link>
         
         <div className="bg-card dark:bg-dark-card p-8 sm:p-10 rounded-xl shadow-2xl border border-border dark:border-dark-border">

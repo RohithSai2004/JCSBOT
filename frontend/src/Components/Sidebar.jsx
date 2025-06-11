@@ -16,7 +16,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
   const isActive = (path) => location.pathname === path;
 
   const navItems = [
-    { path: '/', label: 'Home', icon: Home },
+    { path: '/dashboard', label: 'Home', icon: Home },
     { path: '/documents', label: 'Documents', icon: FileText },
     { path: '/sessions', label: 'Chat History', icon: History },
   ];

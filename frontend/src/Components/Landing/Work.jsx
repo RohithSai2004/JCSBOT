@@ -9,7 +9,7 @@ const Work = () => {
           How <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-blue-500">It Works</span>
         </h2>
         <p className="text-gray-600 mb-16 max-w-3xl mx-auto">
-          Getting started with JAI JCS is simple and intuitive, designed to fit seamlessly into your workflow.
+          Getting started with JAi JCS is simple and intuitive, designed to fit seamlessly into your workflow.
         </p>
 
         {/* Steps */}
@@ -21,7 +21,7 @@ const Work = () => {
             </div>
             <h3 className="text-xl font-semibold mb-2">Choose a Tool</h3>
             <p className="text-gray-600 text-center max-w-xs">
-              Select the JAI tool that best fits your current needs from the dashboard.
+              Select the JAi tool that best fits your current needs from the dashboard.
             </p>
           </div>
 
@@ -43,7 +43,7 @@ const Work = () => {
             </div>
             <h3 className="text-xl font-semibold mb-2">Get Results</h3>
             <p className="text-gray-600 text-center max-w-xs">
-              Review and use JAI's intelligent output tailored to your specific needs.
+              Review and use JAi's intelligent output tailored to your specific needs.
             </p>
           </div>
         </div>

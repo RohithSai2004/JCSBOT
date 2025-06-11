@@ -50,7 +50,7 @@ const Capabilities = () => {
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.6 }}
         >
-          Unlock the full potential of JAI JCS smart tools to streamline your workflow and boost productivity.
+          Unlock the full potential of JAi JCS smart tools to streamline your workflow and boost productivity.
         </motion.p>
 
         {/* Capabilities Grid */}

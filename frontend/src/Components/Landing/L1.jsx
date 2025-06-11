@@ -20,7 +20,7 @@ const L1 = () => {
 
 
           <div className="pt-6 flex flex-wrap justify-center md:justify-start gap-4">
-            <Link to="/" className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition duration-300">
+            <Link to="/dashboard" className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition duration-300">
               Start Exploring
             </Link>
             <Link to="/about" className="border border-blue-600 text-blue-600 px-6 py-3 rounded-lg font-medium hover:bg-blue-100 transition duration-300">

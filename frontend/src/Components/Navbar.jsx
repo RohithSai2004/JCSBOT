@@ -57,7 +57,7 @@ const Navbar = ({ isLoggedIn, username, handleLogout, toggleSidebar, activeDocum
         >
           <Menu size={24} />
         </button>
-        <div className="flex items-center cursor-pointer group" onClick={() => navigate('/')}>
+        <div className="flex items-center cursor-pointer group" onClick={() => navigate('/dashboard')}>
           <div className="bg-white p-1 rounded-lg shadow-sm">
             <img src={Logo} alt="JCS AI Logo" className="h-8 w-8 sm:h-10 sm:w-10 object-contain rounded-md" />
           </div>
