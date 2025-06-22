@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from app.api.routes import users, core
 from app.config import create_app
+from app.api.routes import admin
 
 # Create FastAPI app with configuration
 app = create_app()
@@ -10,6 +11,7 @@ app = create_app()
 # Include routers
 app.include_router(users.router)
 app.include_router(core.router)
+app.include_router(admin.router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

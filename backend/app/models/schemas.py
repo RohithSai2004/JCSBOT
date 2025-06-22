@@ -1,11 +1,30 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from fastapi import UploadFile
+import os
+from dotenv import load_dotenv
+from datetime import datetime
+
+load_dotenv()
+
+
 
 
 class WelcomeResponse(BaseModel):
     message: str
     time: str
+
+class User(BaseModel):
+    username: str
+    email: str
+    full_name: str
+    hashed_password: str
+    disabled: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    last_login: Optional[datetime] = None
+    reset_token: Optional[str] = None
+    reset_token_expiry: Optional[datetime] = None
+    is_admin: bool = False  # This field is crucial
 
 class SecurityCheck(BaseModel):
     """Check for prompt injection or system manipulation attempts"""

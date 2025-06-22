@@ -1,0 +1,18 @@
+NovaTech Company Overview
+        
+NovaTech is a leading technology company specializing in AI solutions.
+
+Key Information:
+- Founded: 01/01/2010
+- CEO: John Smith
+- Location: San Francisco, CA
+- Employees: 500+
+
+Products:
+1. NovaAI - Advanced AI Assistant
+2. DataFlow - Data Processing Platform
+3. CloudNova - Cloud Infrastructure
+
+Contact:
+- Email: info@novatech.com
+- Phone: (555) 123-4567

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timedelta
@@ -81,3 +81,4 @@ async def reset_password(request: ResetPasswordConfirm):
     await update_user(user_obj)
 
     return {"message": "Password reset successfully"}
+

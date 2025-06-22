@@ -4,13 +4,15 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import uuid
 import logging
+import re
 # import numpy as np # Only if you are using numpy for cosine_similarity directly
 
 # Make sure these are correctly imported
 from app.db.mongodb import (
     chat_history_collection,
     get_document_embeddings,  # Crucial for fetching chunk text
-    get_document_embeddings_for_document  # Added for fetching embeddings for a specific document
+    get_document_embeddings_for_document,  # Added for fetching embeddings for a specific document
+    get_document  # Added for fetching full document content as fallback
 )
 from app.utils.embeddings import get_embedding
 
@@ -25,28 +27,64 @@ def cosine_similarity(vec1, vec2):
         return 0
     return dot_product / (magnitude1 * magnitude2)
 
+def is_valid_session_id(session_id):
+    """Check if the session ID is a valid UUID or a custom format."""
+    if not session_id or not isinstance(session_id, str):
+        return False
+        
+    # Check if it's a valid UUID
+    try:
+        uuid_obj = uuid.UUID(session_id)
+        return True
+    except ValueError:
+        pass
+    
+    # Check if it's your custom format (alphanumeric string)
+    # Modified to match the format like 'umdt4lcgecw3piyk3ssx'
+    if re.match(r'^[a-z0-9]{20}', session_id):
+        return True
+    
+    return False
+
 class ChatSession:
     # ... (keep __init__, add_message, save_to_db, load_from_db, get_context as previously corrected) ...
     def __init__(self, user_id: str, session_id: Optional[str] = None):
-        self.session_id = session_id if session_id and session_id.strip() else str(uuid.uuid4())
+        # If session_id is provided and valid, use it; otherwise generate a UUID
+        if session_id and session_id.strip():
+            self.session_id = session_id.strip()
+            logger.debug(f"Using provided session ID: {self.session_id}")
+        else:
+            self.session_id = str(uuid.uuid4())
+            logger.debug(f"Generated new UUID session ID: {self.session_id}")
+            
         self.user_id = user_id
         self.created_at: datetime = datetime.now()
         self.last_activity: datetime = datetime.now()
         self.active_documents: List[str] = []
         self.chat_history: List[Dict] = []
 
-    async def add_message(self, prompt: str, response: str, document_hashes: Optional[List[str]] = None, document_metadata: Optional[Dict] = None):
+    async def add_message(self, prompt: str, response: str, document_hashes: Optional[List[str]] = None, 
+                         document_metadata: Optional[Dict] = None, task: Optional[str] = None, 
+                         input_tokens: int = 0, output_tokens: int = 0):
         if not prompt.strip() and not response.strip():
             logger.debug(f"Skipping empty message for session {self.session_id}")
             return
             
+        if document_hashes is None:
+            document_hashes = []
+        if document_metadata is None:
+            document_metadata = {}
+
         message_timestamp = datetime.now() 
         message = {
             "prompt": prompt,
             "response": response,
             "timestamp": message_timestamp.isoformat(),
-            "document_hashes": document_hashes or [],
-            "document_metadata": document_metadata or {}
+            "document_hashes": document_hashes,
+            "document_metadata": document_metadata,
+            "task": task,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens
         }
         self.chat_history.append(message)
         self.last_activity = message_timestamp 
@@ -56,9 +94,11 @@ class ChatSession:
                 if doc_hash not in self.active_documents:
                     self.active_documents.append(doc_hash)
                     
+        # Log token usage for monitoring
+        logger.info(f"Session {self.session_id}: Message added - Input tokens: {input_tokens}, Output tokens: {output_tokens}")
+
         await self.save_to_db()
         logger.info(f"Message added and session {self.session_id} saved.")
-
 
     async def save_to_db(self):
         session_data = {
@@ -162,44 +202,79 @@ class ChatSession:
         used_document_hashes = set()
         all_relevant_chunk_texts = []
 
+        # First, get all document metadata in one go
+        document_metadata = {}
         for doc_hash in self.active_documents:
-            logger.debug(f"Session {self.session_id}: Fetching embeddings for doc_hash: {doc_hash}")
-            chunk_embeddings_data = await get_document_embeddings(doc_hash, self.user_id) 
-            
-            if not chunk_embeddings_data:
-                logger.warning(f"Session {self.session_id}: No embeddings found for doc_hash: {doc_hash}")
-                continue
-            
-            similarities = []
-            for chunk_data in chunk_embeddings_data:
-                if hasattr(chunk_data, 'embedding') and hasattr(chunk_data, 'text') and chunk_data.embedding:
-                    try:
-                        similarity = cosine_similarity(prompt_embedding, chunk_data.embedding)
-                        similarities.append((similarity, chunk_data.text, chunk_data.chunk_id)) # Store text and chunk_id
-                    except Exception as e:
-                        logger.error(f"Session {self.session_id}: Error calculating similarity for chunk {chunk_data.chunk_id} in doc {doc_hash}: {e}", exc_info=False)
+            try:
+                doc = await get_document(doc_hash, self.user_id)
+                if doc and hasattr(doc, 'filename'):
+                    document_metadata[doc_hash] = doc.filename
                 else:
-                    logger.warning(f"Session {self.session_id}: Skipping chunk in doc {doc_hash} due to missing text or embedding.")
-            
-            if not similarities:
-                logger.debug(f"Session {self.session_id}: No valid similarities calculated for doc_hash: {doc_hash}")
-                continue
+                    document_metadata[doc_hash] = f"Document {doc_hash[:8]}..."
+            except Exception as e:
+                logger.warning(f"Session {self.session_id}: Could not fetch metadata for document {doc_hash}: {e}")
+                document_metadata[doc_hash] = f"Document {doc_hash[:8]}..."
+        
+        for doc_hash in self.active_documents:
+            doc_name = document_metadata.get(doc_hash, f"Document {doc_hash[:8]}...")
+            logger.debug(f"Session {self.session_id}: Fetching embeddings for document: {doc_name} ({doc_hash})")
+            try:
+                chunk_embeddings_data = await get_document_embeddings(doc_hash, self.user_id) 
+                
+                if not chunk_embeddings_data:
+                    logger.warning(f"Session {self.session_id}: No valid embeddings found for document: {doc_name}")
+                    # Try to get the full document as fallback
+                    document_object = await get_document(doc_hash, self.user_id)
+                    if document_object and hasattr(document_object, 'content') and document_object.content:
+                        logger.info(f"Session {self.session_id}: Using full document content as fallback for {doc_name}")
+                        all_relevant_chunk_texts.append(f"[Content from {doc_name}]:\n{document_object.content[:5000]}")
+                        used_document_hashes.add(doc_hash)
+                    continue
+                
+                similarities = []
+                for chunk_data in chunk_embeddings_data:
+                    if hasattr(chunk_data, 'embedding') and hasattr(chunk_data, 'text') and chunk_data.embedding:
+                        try:
+                            similarity = cosine_similarity(prompt_embedding, chunk_data.embedding)
+                            similarities.append((similarity, chunk_data.text, chunk_data.chunk_id)) # Store text and chunk_id
+                        except Exception as e:
+                            logger.error(f"Session {self.session_id}: Error calculating similarity for chunk {chunk_data.chunk_id} in doc {doc_hash}: {e}", exc_info=False)
+                    else:
+                        logger.warning(f"Session {self.session_id}: Skipping chunk in doc {doc_hash} due to missing text or embedding.")
+                
+                if not similarities:
+                    logger.debug(f"Session {self.session_id}: No valid similarities calculated for doc_hash: {doc_hash}")
+                    continue
 
-            similarities.sort(reverse=True, key=lambda x: x[0])
-            
-            doc_relevant_texts = []
-            for i, (sim, text, chunk_id) in enumerate(similarities):
-                if i < top_k_chunks and sim >= similarity_threshold:
-                    logger.info(f"Session {self.session_id}: Using chunk {chunk_id} from doc {doc_hash} (similarity: {sim:.4f})")
-                    doc_relevant_texts.append(f"[Content from Document ID {doc_hash[:8]}..., Chunk {chunk_id}]:\n{text}")
-                    used_document_hashes.add(doc_hash)
-                elif i < top_k_chunks and len(self.active_documents) == 1 and i < 1: # If only one doc, take at least top one if not meeting threshold
-                    logger.info(f"Session {self.session_id}: Using chunk {chunk_id} from single active doc {doc_hash} (similarity: {sim:.4f}, below threshold but top chunk)")
-                    doc_relevant_texts.append(f"[Content from Document ID {doc_hash[:8]}..., Chunk {chunk_id}]:\n{text}")
-                    used_document_hashes.add(doc_hash)
-            
-            if doc_relevant_texts:
-                 all_relevant_chunk_texts.extend(doc_relevant_texts)
+                similarities.sort(reverse=True, key=lambda x: x[0])
+                
+                doc_relevant_texts = []
+                for i, (sim, text, chunk_id) in enumerate(similarities):
+                    if i < top_k_chunks and sim >= similarity_threshold:
+                        doc_name = document_metadata.get(doc_hash, f"Document {doc_hash[:8]}...")
+                        logger.info(f"Session {self.session_id}: Using chunk {chunk_id} from {doc_name} (similarity: {sim:.4f})")
+                        doc_relevant_texts.append(f"[Content from {doc_name}, Chunk {chunk_id}]:\n{text}")
+                        used_document_hashes.add(doc_hash)
+                    elif i < top_k_chunks and len(self.active_documents) == 1 and i < 1: # If only one doc, take at least top one if not meeting threshold
+                        doc_name = document_metadata.get(doc_hash, f"Document {doc_hash[:8]}...")
+                        logger.info(f"Session {self.session_id}: Using chunk {chunk_id} from single active doc {doc_name} (similarity: {sim:.4f}, below threshold but top chunk)")
+                        doc_relevant_texts.append(f"[Content from {doc_name}, Chunk {chunk_id}]:\n{text}")
+                        used_document_hashes.add(doc_hash)
+                
+                if doc_relevant_texts:
+                     all_relevant_chunk_texts.extend(doc_relevant_texts)
+            except Exception as e:
+                logger.error(f"Session {self.session_id}: Error processing document {doc_hash}: {e}", exc_info=True)
+                # Try to get the full document as fallback
+                try:
+                    document_object = await get_document(doc_hash, self.user_id)
+                    if document_object and hasattr(document_object, 'content') and document_object.content:
+                        doc_name = document_metadata.get(doc_hash, f"Document {doc_hash[:8]}...")
+                        logger.info(f"Session {self.session_id}: Using full document content as fallback after error for {doc_name}")
+                        all_relevant_chunk_texts.append(f"[Content from {doc_name}]:\n{document_object.content[:5000]}")
+                        used_document_hashes.add(doc_hash)
+                except Exception as inner_e:
+                    logger.error(f"Session {self.session_id}: Error getting fallback document content for {doc_hash}: {inner_e}")
         
         if not all_relevant_chunk_texts:
             logger.info(f"Session {self.session_id}: No document chunks found relevant enough for the prompt.")
@@ -212,12 +287,19 @@ class ChatSession:
     async def get_document_context_for_specific_document(self, prompt: str, document_hash: str) -> Tuple[str, List[str]]:
         """Get document context from a specific document only."""
         try:
-            prompt_embedding = get_embedding(prompt)
+            # Get document metadata first
+            doc = await get_document(document_hash, self.user_id)
+            doc_name = doc.filename if doc and hasattr(doc, 'filename') else f"Document {document_hash[:8]}..."
             
+            prompt_embedding = get_embedding(prompt)
             document_embeddings = await get_document_embeddings_for_document(document_hash, self.user_id)
             
             if not document_embeddings:
-                logger.warning(f"No embeddings found for document {document_hash}")
+                logger.warning(f"No embeddings found for document {doc_name} ({document_hash})")
+                # Try to get the full document as fallback
+                if doc and hasattr(doc, 'content') and doc.content:
+                    logger.info(f"Using full document content as fallback for {doc_name}")
+                    return f"[Content from {doc_name}]:\n{doc.content[:5000]}", [document_hash]
                 return "", []
             
             similarities = []
@@ -233,13 +315,13 @@ class ChatSession:
             
             for embedding, similarity in similarities[:5]:
                 if similarity > threshold or len(top_chunks) < 1:
-                    chunk_text = f"[Content from Document ID {embedding.document_hash[:6]}..., Chunk {embedding.chunk_id}]:\n{embedding.text}\n\n"
+                    chunk_text = f"[Content from {doc_name}, Chunk {embedding.chunk_id}]:\n{embedding.text}\n\n"
                     top_chunks.append(chunk_text)
                     if embedding.document_hash not in used_documents:
                         used_documents.append(embedding.document_hash)
-                    logger.info(f"Session {self.session_id}: Using chunk {embedding.chunk_id} from doc {embedding.document_hash} (similarity: {similarity:.4f})")
+                    logger.info(f"Session {self.session_id}: Using chunk {embedding.chunk_id} from {doc_name} (similarity: {similarity:.4f})")
                 else:
-                    logger.info(f"Session {self.session_id}: Skipping chunk {embedding.chunk_id} from doc {embedding.document_hash} (similarity: {similarity:.4f}, below threshold)")
+                    logger.info(f"Session {self.session_id}: Skipping chunk {embedding.chunk_id} from {doc_name} (similarity: {similarity:.4f}, below threshold)")
             
             combined_context = "".join(top_chunks)
             logger.info(f"Session {self.session_id}: Combined document context generated (length: {len(combined_context)}). Used {len(used_documents)} documents.")
@@ -247,6 +329,14 @@ class ChatSession:
             return combined_context, used_documents
         except Exception as e:
             logger.error(f"Error getting document context: {e}")
+            # Try to return at least something useful
+            try:
+                doc = await get_document(document_hash, self.user_id)
+                if doc and hasattr(doc, 'content') and doc.content:
+                    doc_name = doc.filename if hasattr(doc, 'filename') else f"Document {document_hash[:8]}..."
+                    return f"[Content from {doc_name}]:\n{doc.content[:5000]}", [document_hash]
+            except Exception as inner_e:
+                logger.error(f"Error in fallback document retrieval: {inner_e}")
             return "", []
 
     async def get_conversation_history(self) -> str:
@@ -271,28 +361,49 @@ class ChatSessionManager:
         self.sessions: Dict[str, ChatSession] = {}
 
     async def get_or_create_session(self, user_id: str, session_id: Optional[str] = None) -> ChatSession:
-        if session_id and not session_id.strip(): session_id = None
+        if session_id and not session_id.strip(): 
+            session_id = None
+            
         if session_id:
-            if session_id in self.sessions:
-                session = self.sessions[session_id]
-                session.last_activity = datetime.now()
-                return session
+            logger.info(f"Session ID validation check: '{session_id}' is valid: {is_valid_session_id(session_id)}")
+            
+        if session_id and is_valid_session_id(session_id):
             logger.info(f"Attempting to load session {session_id} for user {user_id} from DB.")
-            session = await ChatSession.load_from_db(session_id, user_id)
-            if session:
-                logger.info(f"Session {session_id} loaded from DB for user {user_id}.")
-                session.last_activity = datetime.now()
-                self.sessions[session_id] = session
-                return session
+            
+            # Check if the session exists in the database
+            session_doc = await chat_history_collection.find_one({"session_id": session_id, "user_id": user_id})
+            if session_doc:
+                logger.info(f"Found session document in DB: {session_id}")
+                session = await ChatSession.load_from_db(session_id, user_id)
+                if session:
+                    logger.info(f"Successfully loaded session {session_id} for user {user_id}.")
+                    # Update last activity time
+                    session.last_activity = datetime.now()
+                    await session.save_to_db()
+                    return session
+                else:
+                    logger.warning(f"Failed to load session {session_id} despite finding document in DB.")
             else:
-                logger.warning(f"Session {session_id} (user {user_id}) not found in DB. Creating new.")
-                session_id = None 
-        logger.info(f"Creating new session for user {user_id} (requested SID: {session_id}).")
-        new_session_instance = ChatSession(user_id, session_id)
-        self.sessions[new_session_instance.session_id] = new_session_instance
-        await new_session_instance.save_to_db()
-        logger.info(f"New session {new_session_instance.session_id} created and saved for user {user_id}.")
-        return new_session_instance
+                logger.info(f"No session document found in DB for ID: {session_id}, user: {user_id}")
+                
+            # If we get here, we need to create a new session but use the provided ID
+            logger.info(f"Creating new session with provided ID {session_id} for user {user_id}.")
+            session = ChatSession(user_id=user_id, session_id=session_id)
+            await session.save_to_db()
+            logger.info(f"New session {session_id} created and saved for user {user_id}.")
+            return session
+        else:
+            if session_id:
+                logger.info(f"Invalid session ID provided: '{session_id}'. Creating new session for user {user_id}.")
+            else:
+                logger.info(f"No session ID provided. Creating new session for user {user_id}.")
+            
+            # Create a new session with a UUID
+            new_session_id = str(uuid.uuid4())
+            session = ChatSession(user_id=user_id, session_id=new_session_id)
+            await session.save_to_db()
+            logger.info(f"New session {new_session_id} created and saved for user {user_id}.")
+            return session
 
     async def get_user_sessions(self, user_id: str, days: int = 15) -> List[Dict]:
         cutoff_date = datetime.now() - timedelta(days=days)

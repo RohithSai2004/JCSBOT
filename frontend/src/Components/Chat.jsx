@@ -106,8 +106,10 @@ const Chat = () => {
 
             // Update session ID if this was a new session
             if (!currentSessionId && response.data.session_id) {
-                setCurrentSessionId(response.data.session_id);
-                navigate(`/chat/${response.data.session_id}`, { replace: true });
+                const newSessionId = response.data.session_id;
+                setCurrentSessionId(newSessionId);
+                localStorage.setItem('currentSessionId', newSessionId);
+                navigate(`/chat/${newSessionId}`, { replace: true });
             }
         } catch (err) {
             setError(err.response?.data?.detail || 'Failed to send message');
@@ -207,4 +209,4 @@ const Chat = () => {
     );
 };
 
-export default Chat; 
+export default Chat;

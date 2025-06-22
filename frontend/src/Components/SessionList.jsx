@@ -57,6 +57,11 @@ const SessionList = () => {
         navigate(`/chat/${sessionId}`);
     };
 
+    const startNewConversation = () => {
+        // Navigate to root without a session ID to force a new conversation
+        navigate('/', { replace: true });
+    };
+
     const deleteSession = async (sessionId, sessionPreview, e) => {
          e.stopPropagation(); 
         if (!window.confirm(`Are you sure you want to delete the conversation starting with "${sessionPreview || 'Untitled Conversation'}"? This action cannot be undone.`)) {
@@ -137,7 +142,6 @@ const SessionList = () => {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5 }}
                     >
-                        {/* ... (header and button) ... */}
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-4">
                             <div>
                                 <h1 className="text-3xl sm:text-4xl font-extrabold text-light-foreground dark:text-dark-foreground">
@@ -148,21 +152,19 @@ const SessionList = () => {
                                 </p>
                             </div>
                             <button
-                                onClick={() => navigate('/')}
+                                onClick={startNewConversation}
                                 className="btn-primary w-full sm:w-auto flex items-center justify-center gap-2 text-sm sm:text-base"
                             >
                                 <PlusCircle size={18} /> New Conversation
                             </button>
                         </div>
 
-                        {/* ... (loading, error, no sessions messages) ... */}
                         {loading && (
                             <div className="flex flex-col items-center justify-center py-20 text-center">
                                 <Loader2 size={48} className="animate-spin text-light-primary dark:text-dark-primary mb-4" />
                                 <p className="text-lg text-light-muted-foreground dark:text-dark-muted-foreground">Loading conversations...</p>
                             </div>
                         )}
-                        {/* ... (rest of the conditional rendering) ... */}
 
                         {!loading && !error && sessions.length > 0 && (
                             <div className="space-y-8">
@@ -190,7 +192,6 @@ const SessionList = () => {
                                                 return (
                                                     <motion.div
                                                         key={session.session_id}
-                                                        // ... (other motion props)
                                                         layout
                                                         initial={{ opacity: 0, x: -20 }}
                                                         animate={{ opacity: 1, x: 0 }}
@@ -200,7 +201,6 @@ const SessionList = () => {
                                                         className="card p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 hover:border-light-primary dark:hover:border-dark-primary cursor-pointer transition-all duration-150 ease-in-out group hover:shadow-xl"
                                                     >
                                                         <div className="flex items-center gap-4 flex-1 min-w-0">
-                                                            {/* ... (icon) ... */}
                                                             <div className={`flex-shrink-0 p-3 rounded-xl group-hover:scale-105 transition-transform duration-200 ${index % 2 === 0 ? 'bg-light-primary/10 dark:bg-dark-primary/10' : 'bg-light-accent/5 dark:bg-dark-accent/10'}`}>
                                                                 <MessageSquareText size={22} className={`${index % 2 === 0 ? 'text-light-primary dark:text-dark-primary' : 'text-light-accent dark:text-dark-accent'}`} />
                                                             </div>
@@ -209,7 +209,6 @@ const SessionList = () => {
                                                                     {session.preview || "Untitled Conversation"}
                                                                 </p>
                                                                 <div className="flex items-center gap-3 mt-1 text-xs text-light-muted-foreground dark:text-dark-muted-foreground">
-                                                                    {/* MODIFIED PART FOR DISPLAYING TIME/DATE */}
                                                                     <span>{displayTime}</span>
                                                                     {session.document_count > 0 && (
                                                                         <span className="flex items-center gap-1">
@@ -220,7 +219,6 @@ const SessionList = () => {
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        {/* ... (delete button) ... */}
                                                         <button
                                                             onClick={(e) => deleteSession(session.session_id, session.preview, e)}
                                                             className="btn-ghost p-2 text-light-muted-foreground dark:text-dark-muted-foreground hover:text-light-destructive dark:hover:text-dark-destructive hover:bg-light-destructive/10 dark:hover:bg-dark-destructive/10 rounded-lg transition-colors mt-2 sm:mt-0 ml-auto sm:ml-0 opacity-60 group-hover:opacity-100 focus:opacity-100"

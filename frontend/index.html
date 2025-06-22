@@ -4,7 +4,28 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React</title>
+    <title>JAIJCS</title>
+    <!-- Add session persistence script -->
+    <script>
+      // Check if we need to restore a session from localStorage
+      window.addEventListener('DOMContentLoaded', function() {
+        const currentPath = window.location.pathname;
+        const storedSessionId = localStorage.getItem('currentSessionId');
+        
+        // If we're at root and have a stored session ID, redirect to that session
+        if (currentPath === '/' && storedSessionId) {
+          window.history.replaceState(null, '', `/chat/${storedSessionId}`);
+        }
+        
+        // If we're on a chat page with session ID, store it
+        if (currentPath.startsWith('/chat/')) {
+          const sessionId = currentPath.split('/chat/')[1];
+          if (sessionId) {
+            localStorage.setItem('currentSessionId', sessionId);
+          }
+        }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

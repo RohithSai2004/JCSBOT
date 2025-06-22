@@ -66,7 +66,8 @@ const Dashboard = () => {
             initialMessage={location.state?.initialMessage}
             initialResponse={location.state?.initialResponse}
             selectedTask={location.state?.selectedTask}
-          />
+            Outlet/>
+          
         </main>
       </div>
     </div>

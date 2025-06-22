@@ -87,7 +87,7 @@ const PreWithCopyButton = ({ node, children, className: inheritedClassName, ...p
 };
 
 
-const ChatDisplay = ({ messages, isLoading, onPromptSuggestionClick }) => {
+const ChatDisplay = ({ messages, isLoading, onPromptSuggestionClick, forceNewSession }) => {
   const scrollableContainerRef = useRef(null);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const [isAtBottomBeforeUpdate, setIsAtBottomBeforeUpdate] = useState(true);
@@ -167,7 +167,22 @@ const ChatDisplay = ({ messages, isLoading, onPromptSuggestionClick }) => {
 
   return (
     <div ref={scrollableContainerRef} className="flex-1 p-4 sm:p-6 custom-scrollbar bg-transparent overflow-y-auto">
-      <div className="max-w-3xl mx-auto space-y-5 pb-4"> {/* Added pb-4 for some bottom spacing */}
+      {/* New Conversation Button - Fixed at top right */}
+      {messages.length > 0 && (
+        <div className="flex justify-end mb-4 sticky top-0 z-10">
+          <button
+            onClick={forceNewSession}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-light-primary/10 dark:bg-dark-primary/10 text-light-primary dark:text-dark-primary hover:bg-light-primary/20 dark:hover:bg-dark-primary/20 transition-colors border border-light-border dark:border-dark-border shadow-sm"
+          >
+            <span>New Conversation</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+      )}
+      <div className="max-w-3xl mx-auto space-y-5 pb-4">
         {messages.length === 0 && !isLoading ? (
           <div className="text-center pt-10 sm:pt-12">
             <motion.div

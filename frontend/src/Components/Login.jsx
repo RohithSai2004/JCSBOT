@@ -3,13 +3,31 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import apiClient from '../api/apiClient';
 import { LogIn, User, Lock, Eye, EyeOff, AlertCircle, Zap } from 'lucide-react';
-import Logo from "../Assets/jaijcs.jpg"; // Your logo
-import { useTheme } from '../contexts/ThemeContext'; // Import useTheme
+import Logo from "../Assets/jaijcs.jpg"; // Make sure to import your logo
+import { useTheme } from '../contexts/ThemeContext';
+
+// Function to decode JWT token
+const decodeJWT = (token) => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (error) {
+    console.error("Error decoding token:", error);
+    return {};
+  }
+};
 
 const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { theme } = useTheme(); // Get current theme
+  const { theme } = useTheme();
   const [formData, setFormData] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,13 +59,31 @@ const Login = () => {
       const formDataToSend = new FormData();
       formDataToSend.append('username', formData.username);
       formDataToSend.append('password', formData.password);
+      
       const response = await apiClient.post('/token', formDataToSend, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
-      localStorage.setItem('token', response.data.access_token);
+      
+      const token = response.data.access_token;
+      
+      // Store the token and username
+      localStorage.setItem('token', token);
       localStorage.setItem('username', formData.username);
-      navigate('/');
+      
+      // Decode the JWT token to get the admin status
+      const decodedToken = decodeJWT(token);
+      console.log("Decoded token:", decodedToken);
+      
+      // Set the admin status based on the decoded token
+      const isAdmin = decodedToken.is_admin === true;
+      localStorage.setItem('is_admin', isAdmin ? 'true' : 'false');
+      
+      console.log("Admin status set to:", isAdmin ? 'true' : 'false');
+      
+      // Navigate to the dashboard after successful login
+      navigate('/dashboard');
     } catch (err) {
+      console.error("Login error:", err);
       setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
@@ -57,7 +93,6 @@ const Login = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 selection:bg-primary/30 selection:text-primary-foreground">
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
-        {/* Subtle animated background shapes or gradient mesh */}
         <div className="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 bg-primary/30 dark:bg-dark-primary/20 rounded-full filter blur-3xl opacity-50 animate-pulse-subtle"></div>
         <div className="absolute -bottom-1/4 -right-1/4 w-1/2 h-1/2 bg-accent/30 dark:bg-dark-accent/20 rounded-full filter blur-3xl opacity-50 animate-pulse-subtle animation-delay-2000"></div>
       </div>
